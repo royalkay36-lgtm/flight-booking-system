@@ -1,0 +1,44 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Chạy dự án",
+      "dependsOn": ["Backend", "Frontend"],
+      "dependsOrder": "parallel",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend",
+      "type": "process",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/fastapi.exe",
+      "args": ["dev", "app/main.py"],
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "isBackground": true,
+      "presentation": { "group": "servers", "panel": "dedicated" },
+      "problemMatcher": {
+        "pattern": { "regexp": "^__never_matches__$" },
+        "background": { "activesBegin": true, "beginsPattern": "Will watch for changes", "endsPattern": "Application startup complete" }
+      }
+    },
+    {
+      "label": "Frontend",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "presentation": { "group": "servers", "panel": "dedicated" },
+      "problemMatcher": {
+        "pattern": { "regexp": "^__never_matches__$" },
+        "background": { "activesBegin": true, "beginsPattern": "VITE", "endsPattern": "Local:" }
+      }
+    },
+    {
+      "label": "Nạp lại database mẫu",
+      "type": "shell",
+      "command": "& 'C:/Program Files/PostgreSQL/17/bin/dropdb.exe' -U postgres -h localhost --if-exists --force flight_booking; & 'C:/Program Files/PostgreSQL/17/bin/createdb.exe' -U postgres -h localhost flight_booking; & 'C:/Program Files/PostgreSQL/17/bin/psql.exe' -U postgres -h localhost -d flight_booking -q -v ON_ERROR_STOP=1 -f database/01_schema.sql -f database/02_functions.sql -f database/03_seed.sql",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PGPASSWORD": "postgres" } },
+      "problemMatcher": []
+    }
+  ]
+}
