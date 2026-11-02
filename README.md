@@ -91,6 +91,56 @@ cd ..
 python tests/test_concurrency.py
 ```
 
+## Chạy bằng VS Code
+
+Thư mục `.vscode/` đã cấu hình sẵn: chạy cả hệ thống bằng một phím, debug backend, chạy test, nạp lại database.
+
+### Lần đầu trên máy mới (Windows)
+
+1. Cài **Git**, **Python 3.11+**, **Node.js 20+**, **PostgreSQL 17** (đặt mật khẩu user `postgres` là `postgres`,
+   cổng 5432) và **VS Code**.
+2. Clone repo và mở **đúng thư mục repo** (thư mục có file `README.md`) bằng *File → Open Folder*:
+   ```bash
+   git clone https://github.com/royalkay36-lgtm/flight-booking-system.git
+   ```
+3. VS Code hỏi *Do you trust the authors…* → **Yes**. Thông báo gợi ý extension (Python, Tailwind CSS, PostgreSQL)
+   → **Install**.
+4. Mở terminal (`` Ctrl+` ``) và cài thư viện:
+   ```bash
+   cd backend; python -m venv .venv; .venv\Scripts\python -m pip install -r requirements.txt; cd ..
+   ```
+   ```bash
+   cd frontend; npm install; cd ..
+   ```
+5. Tạo database: `Ctrl+Shift+P` → **Tasks: Run Task** → **Nạp lại database mẫu**.
+
+### Hằng ngày
+
+| Muốn làm | Thao tác |
+|---|---|
+| Chạy hệ thống | **`Ctrl+Shift+B`** → mở 2 terminal *Backend* và *Frontend*; khi Frontend hiện `Local: http://localhost:5173/` thì `Ctrl` + bấm vào link |
+| Tắt hệ thống | Bấm 🗑 trên từng terminal *Backend* và *Frontend* |
+| Lấy code mới của nhóm | `Ctrl+Shift+G` → **Sync Changes** (hoặc `git pull`); nếu có thay đổi ở `database/` hoặc `package.json` thì chạy lại `npm install` và task **Nạp lại database mẫu** |
+| Commit & push | `Ctrl+Shift+G` → nhập mô tả → **Commit** → **Sync Changes** |
+| Debug backend | Tắt terminal *Backend* trước (trùng cổng 8000), đặt breakpoint (chấm đỏ ở lề trái file `.py`) → **`F5`** |
+| Chạy test | Biểu tượng **Testing** (bình thí nghiệm) ở thanh bên trái → ▶ (cần database đang chạy) |
+| Nạp lại dữ liệu mẫu | `Ctrl+Shift+P` → **Tasks: Run Task** → **Nạp lại database mẫu** (xoá toàn bộ dữ liệu thử) |
+| Xem email vé điện tử | Thư mục `backend/outbox/` → chuột phải file `.html` → *Reveal in File Explorer* → mở bằng trình duyệt |
+| Xem / thử API | http://localhost:8000/docs |
+
+Sửa code xong chỉ cần lưu (`Ctrl+S`): giao diện tự cập nhật, backend tự khởi động lại.
+
+### Lỗi thường gặp
+
+| Hiện tượng | Cách xử lý |
+|---|---|
+| Báo cổng 5173 / 8000 đang được dùng | Hệ thống đang chạy ở cửa sổ / terminal khác — tắt chỗ đó rồi chạy lại |
+| Web trắng, lỗi 500 hoặc thiếu cột / bảng sau khi lấy code mới | Chạy task **Nạp lại database mẫu** |
+| Không tìm thấy chuyến bay nào | Lịch bay mẫu chỉ có 14 ngày kể từ lúc nạp — chạy task **Nạp lại database mẫu** |
+| Frontend báo không tìm thấy module (vd. `qrcode`) | Trong thư mục `frontend` chạy `npm install` |
+| Task nạp database báo không tìm thấy `psql.exe` | Máy cài PostgreSQL khác bản 17 — sửa số `17` trong `.vscode/tasks.json` cho đúng phiên bản |
+| Backend báo không kết nối được database | Kiểm tra dịch vụ `postgresql-x64-17` đang chạy (Windows → Services) và mật khẩu `postgres` |
+
 ## Chức năng
 
 | Vai trò | Trang | Chức năng |
