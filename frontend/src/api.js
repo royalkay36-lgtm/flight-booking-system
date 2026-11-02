@@ -60,3 +60,5 @@ export const TICKET_STATUS = {
 }
 
 export const CABIN = { ECONOMY: 'Phổ thông', BUSINESS: 'Thương gia' }
+export const PAX = { ADULT: 'Người lớn', CHILD: 'Trẻ em (2–11)', INFANT: 'Em bé (<2)' }
+export const EXTRA_CATEGORY = { BAGGAGE: 'Hành lý ký gửi', MEAL: 'Suất ăn', INSURANCE: 'Bảo hiểm', SIM: 'SIM du lịch' }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
-import { api, CABIN, duration, fmtDate, fmtTime, FLIGHT_STATUS, hourOf, money } from '../api.js'
+import { api, CABIN, duration, fmtDate, fmtTime, FLIGHT_STATUS, hourOf, isoDate, money } from '../api.js'
 import { Badge, ErrorText } from '../ui.jsx'
 
 const SLOTS = { '': 'Cả ngày', '0-12': 'Sáng (00–12h)', '12-18': 'Chiều (12–18h)', '18-24': 'Tối (18–24h)' }
@@ -14,10 +14,45 @@ const inSlot = (iso, slot) => {
 const groupFlights = (rows) =>
   Object.values(rows.reduce((m, r) => ((m[r.flight_id] ??= { ...r, fares: [] }).fares.push(r), m), {}))
 
+// Lịch giá rẻ: giá thấp nhất mỗi ngày quanh ngày đang chọn; bấm để đổi ngày
+function FareStrip({ leg, seats, onPick }) {
+  const [days, setDays] = useState([])
+  useEffect(() => {
+    const from = new Date(leg.date)
+    from.setDate(from.getDate() - 3)
+    const start = isoDate(from) < isoDate() ? isoDate() : isoDate(from)
+    api('/flights/fare-calendar?' + new URLSearchParams({ ...leg, date_from: start, days: 7, passengers: seats }))
+      .then((rows) => {
+        const prices = Object.fromEntries(rows.map((r) => [r.date, r.min_price]))
+        setDays(Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(start)
+          d.setDate(d.getDate() + i)
+          return { date: isoDate(d), price: prices[isoDate(d)] }
+        }))
+      }).catch(() => {})
+  }, [leg.origin, leg.destination, leg.date, seats]) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="grid grid-cols-7 gap-1 text-center text-xs">
+      {days.map((d) => (
+        <button key={d.date} type="button" disabled={!d.price} onClick={() => onPick(d.date)}
+          aria-current={d.date === leg.date ? 'date' : undefined}
+          className={`rounded-lg border px-1 py-2 disabled:opacity-40 ${d.date === leg.date ? 'border-sky-600 bg-sky-50 font-semibold' : 'border-slate-200 bg-white hover:border-sky-400'}`}>
+          <div>{new Date(d.date).toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' })}</div>
+          <div className="text-sky-700">{d.price ? `${Math.round(Number(d.price) / 1000)}k` : '—'}</div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function Results() {
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const q = Object.fromEntries(params)
+  const adults = Number(q.adults ?? q.passengers ?? 1)
+  const children = Number(q.children ?? 0)
+  const infants = Number(q.infants ?? 0)
+  const seatsNeeded = adults + children
   const legs = [
     { origin: q.origin, destination: q.destination, date: q.date },
     ...(q.returnDate ? [{ origin: q.destination, destination: q.origin, date: q.returnDate }] : []),
@@ -31,7 +66,7 @@ export default function Results() {
   useEffect(() => {
     setResults(null)
     setPicked([])
-    Promise.all(legs.map((l) => api('/flights/search?' + new URLSearchParams({ ...l, passengers: q.passengers }))))
+    Promise.all(legs.map((l) => api('/flights/search?' + new URLSearchParams({ ...l, passengers: seatsNeeded }))))
       .then(setResults)
       .catch((e) => setError(e.message))
   }, [params.toString()]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -53,7 +88,7 @@ export default function Results() {
   })
 
   const proceed = () => {
-    sessionStorage.setItem('selection', JSON.stringify({ legs: picked, passengers: Number(q.passengers) }))
+    sessionStorage.setItem('selection', JSON.stringify({ legs: picked, adults, children, infants }))
     navigate('/booking')
   }
 
@@ -95,6 +130,8 @@ export default function Results() {
               <h2 className="text-lg font-semibold">
                 {i === 0 ? 'Chiều đi' : 'Chiều về'}: {leg.origin} → {leg.destination} · {fmtDate(leg.date)}
               </h2>
+              <FareStrip leg={leg} seats={seatsNeeded}
+                onPick={(d) => setParams({ ...q, [i === 0 ? 'date' : 'returnDate']: d })} />
               {!flights.length && <p className="text-sm text-slate-500">Không có chuyến bay phù hợp.</p>}
               {flights.map((f) => (
                 <div key={f.flight_id} className="card flex flex-wrap items-center gap-4">

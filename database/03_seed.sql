@@ -39,13 +39,23 @@ INSERT INTO aircraft_models (code, manufacturer, name) VALUES
     ('A321', 'Airbus', 'Airbus A321'),
     ('B789', 'Boeing', 'Boeing 787-9 Dreamliner');
 
--- Bố cục khoang -> trigger tự sinh bảng seats
-INSERT INTO cabin_layouts (model_code, cabin_class, first_row, last_row, seat_columns) VALUES
-    ('A320', 'ECONOMY',   1, 30, 'ABC-DEF'),       -- 180 ghế, toàn phổ thông
-    ('A321', 'BUSINESS',  1,  4, 'AC-DF'),         -- 16 ghế thương gia 2-2
-    ('A321', 'ECONOMY',   5, 32, 'ABC-DEF'),       -- 168 ghế phổ thông 3-3
-    ('B789', 'BUSINESS',  1,  7, 'A-DG-K'),        -- 28 ghế thương gia 1-2-1
-    ('B789', 'ECONOMY',  10, 38, 'ABC-DEF-HJK');   -- 261 ghế phổ thông 3-3-3
+-- Bố cục khoang -> trigger tự sinh bảng seats. Mỗi khoang phổ thông chia 4 khu giá chọn ghế:
+-- hàng đầu 150k, khu trước 60k, hàng cửa thoát hiểm (rộng chân) 200k, khu sau 40k. Thương gia miễn phí.
+INSERT INTO cabin_layouts (model_code, cabin_class, first_row, last_row, seat_columns, seat_fee) VALUES
+    ('A320', 'ECONOMY',   1,  3, 'ABC-DEF',     150000),   -- A320: 180 ghế, toàn phổ thông
+    ('A320', 'ECONOMY',   4, 11, 'ABC-DEF',      60000),
+    ('A320', 'ECONOMY',  12, 13, 'ABC-DEF',     200000),
+    ('A320', 'ECONOMY',  14, 30, 'ABC-DEF',      40000),
+    ('A321', 'BUSINESS',  1,  4, 'AC-DF',            0),   -- A321: 16 thương gia 2-2 + 168 phổ thông 3-3
+    ('A321', 'ECONOMY',   5,  7, 'ABC-DEF',     150000),
+    ('A321', 'ECONOMY',   8, 15, 'ABC-DEF',      60000),
+    ('A321', 'ECONOMY',  16, 17, 'ABC-DEF',     200000),
+    ('A321', 'ECONOMY',  18, 32, 'ABC-DEF',      40000),
+    ('B789', 'BUSINESS',  1,  7, 'A-DG-K',           0),   -- B787-9: 28 thương gia 1-2-1 + 261 phổ thông 3-3-3
+    ('B789', 'ECONOMY',  10, 12, 'ABC-DEF-HJK', 150000),
+    ('B789', 'ECONOMY',  13, 25, 'ABC-DEF-HJK',  60000),
+    ('B789', 'ECONOMY',  26, 26, 'ABC-DEF-HJK', 200000),
+    ('B789', 'ECONOMY',  27, 38, 'ABC-DEF-HJK',  40000);
 
 INSERT INTO aircraft (registration, model_code, airline_code) VALUES
     ('VN-A601', 'A321', 'VN'),
@@ -61,6 +71,21 @@ INSERT INTO fare_classes (code, name, cabin_class, checked_baggage_kg, carry_on_
     ('BUS_FLEX',  'Thương gia',          'BUSINESS', 32, 18,      0,      0,
      '32kg ký gửi, phòng chờ hạng thương gia. Đổi và hoàn vé miễn phí.');
 
+INSERT INTO ancillary_products (code, category, name, description, price, per_segment, international_only) VALUES
+    ('BAG20',     'BAGGAGE',   'Hành lý ký gửi 20kg', 'Mua trước rẻ hơn mua tại sân bay', 180000, true, false),
+    ('BAG30',     'BAGGAGE',   'Hành lý ký gửi 30kg', 'Mua trước rẻ hơn mua tại sân bay', 260000, true, false),
+    ('BAG40',     'BAGGAGE',   'Hành lý ký gửi 40kg', 'Mua trước rẻ hơn mua tại sân bay', 340000, true, false),
+    ('MEAL_CHK',  'MEAL',      'Cơm gà Hải Nam',      'Kèm nước suối',                     80000, true, false),
+    ('MEAL_PHO',  'MEAL',      'Phở bò',              'Kèm nước suối',                     80000, true, false),
+    ('MEAL_VEG',  'MEAL',      'Suất ăn chay',        'Cơm rau củ, đậu hũ',                70000, true, false),
+    ('INS_TRIP',  'INSURANCE', 'Bảo hiểm du lịch',    'Bồi thường trễ / huỷ chuyến, thất lạc hành lý, tai nạn', 70000, false, false),
+    ('SIM_KR',    'SIM',       'SIM 4G Hàn Quốc 5 ngày',   'Data không giới hạn, nhận tại quầy sân bay đến', 250000, false, true),
+    ('SIM_ASIA',  'SIM',       'SIM 4G châu Á 8 ngày',     'Dùng tại 10 nước châu Á, 6GB tốc độ cao',        320000, false, true);
+
+INSERT INTO vouchers (code, description, discount_type, discount_value, max_discount, min_amount, valid_to, usage_limit) VALUES
+    ('CHAOBAN',   'Giảm 10% cho đơn từ 500.000đ, tối đa 200.000đ', 'PERCENT', 10, 200000,  500000, now() + interval '90 days', 1000),
+    ('BAYVUI100', 'Giảm 100.000đ cho đơn từ 1.500.000đ',            'AMOUNT', 100000, NULL, 1500000, now() + interval '90 days',  500);
+
 -- ---------------------------------------------------------------------
 -- Lịch bay mẫu: 7 chuyến/ngày x 14 ngày (trigger tự sinh flight_seats)
 -- ---------------------------------------------------------------------
@@ -71,7 +96,8 @@ VALUES ('VN213',  'VN', 'VN-A601', 'HAN', 'SGN', time '06:00', interval '2 hours
        ('VJ515',  'VJ', 'VN-A650', 'HAN', 'DAD', time '07:15', interval '1 hour 20 minutes',   690000),
        ('VJ516',  'VJ', 'VN-A650', 'DAD', 'HAN', time '10:00', interval '1 hour 20 minutes',   690000),
        ('QH1021', 'QH', 'VN-A590', 'SGN', 'PQC', time '13:00', interval '1 hour',              850000),
-       ('VN416',  'VN', 'VN-A861', 'HAN', 'ICN', time '23:40', interval '4 hours 30 minutes', 5200000);
+       ('VN416',  'VN', 'VN-A861', 'HAN', 'ICN', time '23:40', interval '4 hours 30 minutes', 5200000),
+       ('VN417',  'VN', 'VN-A861', 'ICN', 'HAN', time '10:30', interval '5 hours',            5200000);
 
 INSERT INTO flights (flight_number, airline_code, aircraft_reg, origin, destination, departure_time, arrival_time)
 SELECT r.flight_number, r.airline_code, r.aircraft_reg, r.origin, r.destination,
@@ -109,6 +135,7 @@ DECLARE
     v_price   numeric := (SELECT price FROM flight_fares WHERE flight_id = v_flight AND fare_class = 'ECO_FLEX');
     v_seat1   bigint := (SELECT flight_seat_id FROM v_seat_map WHERE flight_id = v_flight AND seat_code = '12A');
     v_seat2   bigint := (SELECT flight_seat_id FROM v_seat_map WHERE flight_id = v_flight AND seat_code = '12B');
+    v_fee     numeric := (SELECT seat_fee FROM v_seat_map WHERE flight_seat_id = v_seat1);  -- 12A, 12B cùng khu
     v_booking bigint;
     v_p1      bigint;
     v_p2      bigint;
@@ -116,7 +143,7 @@ BEGIN
     ASSERT hold_seat(v_seat1, v_user) AND hold_seat(v_seat2, v_user), 'Không giữ được ghế mẫu';
 
     INSERT INTO bookings (user_id, contact_email, contact_phone, total_amount, expires_at)
-    VALUES (v_user, 'khach@flight.test', '0900000003', v_price * 2, now() + interval '10 minutes')
+    VALUES (v_user, 'khach@flight.test', '0900000003', (v_price + v_fee) * 2, now() + interval '10 minutes')
     RETURNING id INTO v_booking;
 
     INSERT INTO passengers (booking_id, full_name, gender, date_of_birth, id_number, nationality)
@@ -124,12 +151,12 @@ BEGIN
     INSERT INTO passengers (booking_id, full_name, gender, date_of_birth, id_number, nationality)
     VALUES (v_booking, 'TRAN THI BINH', 'F', '1997-08-25', '001197005678', 'VN') RETURNING id INTO v_p2;
 
-    INSERT INTO tickets (passenger_id, flight_id, fare_class, flight_seat_id, price) VALUES
-        (v_p1, v_flight, 'ECO_FLEX', v_seat1, v_price),
-        (v_p2, v_flight, 'ECO_FLEX', v_seat2, v_price);
+    INSERT INTO tickets (passenger_id, flight_id, fare_class, flight_seat_id, price, seat_fee) VALUES
+        (v_p1, v_flight, 'ECO_FLEX', v_seat1, v_price, v_fee),
+        (v_p2, v_flight, 'ECO_FLEX', v_seat2, v_price, v_fee);
 
     INSERT INTO payments (booking_id, amount, method, status, provider_txn_id, paid_at)
-    VALUES (v_booking, v_price * 2, 'VNPAY', 'SUCCESS', 'VNP-SEED-0001', now());
+    VALUES (v_booking, (v_price + v_fee) * 2, 'VNPAY', 'SUCCESS', 'VNP-SEED-0001', now());
 
     PERFORM confirm_booking(v_booking);
 END $$;

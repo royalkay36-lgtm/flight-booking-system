@@ -9,12 +9,13 @@ SET client_encoding = 'UTF8';
 -- ---------------------------------------------------------------------
 CREATE FUNCTION trg_cabin_layout_seats() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    INSERT INTO seats (model_code, seat_row, seat_letter, grid_col, cabin_class, seat_type)
+    INSERT INTO seats (model_code, seat_row, seat_letter, grid_col, cabin_class, seat_type, seat_fee)
     SELECT NEW.model_code, r, substr(NEW.seat_columns, i, 1), i, NEW.cabin_class,
            CASE WHEN i = 1 OR i = length(NEW.seat_columns)              THEN 'WINDOW'
                 WHEN substr(NEW.seat_columns, i - 1, 1) = '-'
                   OR substr(NEW.seat_columns, i + 1, 1) = '-'            THEN 'AISLE'
-                ELSE 'MIDDLE' END
+                ELSE 'MIDDLE' END,
+           NEW.seat_fee
     FROM generate_series(NEW.first_row, NEW.last_row) AS r,
          generate_series(1, length(NEW.seat_columns)) AS i
     WHERE substr(NEW.seat_columns, i, 1) <> '-';
@@ -155,6 +156,31 @@ BEGIN
     UPDATE bookings SET status = 'CONFIRMED', expires_at = NULL WHERE id = p_booking_id;
 END $$;
 
+-- Xếp ghế tự động khi check-in cho vé chưa chọn ghế: ghế trống rẻ nhất đúng khoang.
+-- SKIP LOCKED: nhiều khách check-in cùng lúc không chờ nhau và không bao giờ nhận trùng ghế.
+CREATE FUNCTION assign_seat(p_ticket_id bigint) RETURNS text LANGUAGE plpgsql AS $$
+DECLARE
+    v_seat bigint;
+    v_code text;
+BEGIN
+    SELECT fs.id, s.seat_code INTO v_seat, v_code
+      FROM tickets t
+      JOIN fare_classes fc ON fc.code = t.fare_class
+      JOIN flight_seats fs ON fs.flight_id = t.flight_id
+      JOIN seats s         ON s.id = fs.seat_id AND s.cabin_class = fc.cabin_class
+     WHERE t.id = p_ticket_id AND t.flight_seat_id IS NULL
+       AND (fs.status = 'AVAILABLE' OR (fs.status = 'HELD' AND fs.hold_expires_at < now()))
+     ORDER BY s.seat_fee, random()
+     LIMIT 1
+       FOR UPDATE OF fs SKIP LOCKED;
+    IF v_seat IS NULL THEN
+        RAISE EXCEPTION 'Chuyến bay không còn ghế trống để xếp';
+    END IF;
+    UPDATE flight_seats SET status = 'BOOKED', held_by = NULL, hold_expires_at = NULL WHERE id = v_seat;
+    UPDATE tickets SET flight_seat_id = v_seat WHERE id = p_ticket_id;
+    RETURN v_code;
+END $$;
+
 -- Dọn dẹp định kỳ (cron/APScheduler/Celery beat ~1 phút/lần):
 -- huỷ booking quá hạn thanh toán và trả các ghế giữ quá hạn về AVAILABLE.
 CREATE FUNCTION release_expired_holds() RETURNS int LANGUAGE plpgsql AS $$
@@ -164,7 +190,12 @@ BEGIN
     WITH expired AS (
         UPDATE bookings SET status = 'EXPIRED'
          WHERE status = 'PENDING' AND expires_at < now()
-        RETURNING id)
+        RETURNING id, voucher_code),
+    voucher_back AS (                         -- trả lại lượt dùng mã của booking không thanh toán
+        UPDATE vouchers v SET used_count = v.used_count - x.n
+          FROM (SELECT voucher_code, count(*) AS n FROM expired
+                 WHERE voucher_code IS NOT NULL GROUP BY voucher_code) x
+         WHERE v.code = x.voucher_code)
     UPDATE tickets SET status = 'CANCELLED'
      WHERE status = 'PENDING'
        AND passenger_id IN (SELECT p.id FROM passengers p JOIN expired e ON e.id = p.booking_id);
@@ -204,7 +235,7 @@ JOIN fare_classes fc ON fc.code = ff.fare_class;
 -- Ghế HELD đã hết hạn hiển thị là AVAILABLE.
 CREATE VIEW v_seat_map AS
 SELECT fs.id AS flight_seat_id, fs.flight_id, s.seat_code, s.seat_row, s.seat_letter,
-       s.grid_col, s.cabin_class, s.seat_type,
+       s.grid_col, s.cabin_class, s.seat_type, s.seat_fee,
        CASE WHEN fs.status = 'HELD' AND fs.hold_expires_at < now() THEN 'AVAILABLE'
             ELSE fs.status END AS status,
        fs.held_by, fs.hold_expires_at
@@ -220,12 +251,12 @@ SELECT f.id AS flight_id, f.flight_number, f.origin, f.destination, f.departure_
 FROM flights f JOIN flight_seats fs ON fs.flight_id = f.id
 GROUP BY f.id;
 
--- Doanh thu theo ngày bay (giờ Việt Nam) và hãng.
+-- Doanh thu vé (giá vé + phí chọn ghế) theo ngày bay (giờ Việt Nam) và hãng.
 CREATE VIEW v_revenue_daily AS
 SELECT (f.departure_time AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS flight_date,
        f.airline_code,
-       count(*)     AS tickets_sold,
-       sum(t.price) AS revenue
+       count(*)                  AS tickets_sold,
+       sum(t.price + t.seat_fee) AS revenue
 FROM tickets t JOIN flights f ON f.id = t.flight_id
 WHERE t.status IN ('ISSUED', 'CHECKED_IN', 'BOARDED')
 GROUP BY 1, 2;

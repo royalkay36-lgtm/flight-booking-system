@@ -22,8 +22,8 @@ export default function Staff() {
     setError('')
     setMessage('')
     try {
-      await fn()
-      setMessage(ok)
+      const result = await fn()
+      setMessage(typeof ok === 'function' ? ok(result) : ok)
     } catch (e) {
       setError(e.message)
     }
@@ -39,9 +39,10 @@ export default function Staff() {
   }, `Đã cập nhật trạng thái ${f.flight_number}`)
 
   const ticketAction = (t, action) => run(async () => {
-    await api(`/staff/tickets/${t.ticket_id}/${action}`, { method: 'POST' })
+    const r = await api(`/staff/tickets/${t.ticket_id}/${action}`, { method: 'POST' })
     await loadManifest(selected)
-  }, `${t.full_name}: ${action === 'board' ? 'đã lên máy bay' : 'đã làm thủ tục'}`)
+    return r
+  }, (r) => `${t.full_name}: ${action === 'board' ? 'đã lên máy bay' : 'đã làm thủ tục'}${r.assigned_seat ? `, xếp ghế ${r.assigned_seat}` : ''}`)
 
   return (
     <div className="space-y-4">

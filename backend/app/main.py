@@ -1,4 +1,5 @@
 import asyncio
+import os
 import threading
 from contextlib import asynccontextmanager
 
@@ -6,13 +7,16 @@ import psycopg
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from . import realtime
+from . import chatbot, realtime
+from .auth import SECRET_KEY
 from .db import pool
 from .routers import admin, auth, bookings, flights, staff
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if os.environ.get("APP_ENV") == "production" and SECRET_KEY.startswith("dev-only"):
+        raise RuntimeError("Chạy production phải đặt biến môi trường SECRET_KEY (khoá mặc định ai cũng biết)")
     pool.open()
     threading.Thread(target=realtime.background_loop, args=(asyncio.get_running_loop(),), daemon=True).start()
     yield
@@ -20,7 +24,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Flight Booking API", lifespan=lifespan)
-for module in (auth, flights, bookings, staff, admin, realtime):
+for module in (auth, flights, bookings, staff, admin, realtime, chatbot):
     app.include_router(module.router)
 
 

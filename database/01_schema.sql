@@ -47,8 +47,9 @@ CREATE TABLE aircraft_models (                -- chủng loại: A320, A321, B78
     name         text NOT NULL
 );
 
--- Bố cục khoang: mỗi dòng là một dải hàng ghế có cùng cách xếp cột.
+-- Bố cục khoang: mỗi dòng là một dải hàng ghế có cùng cách xếp cột và cùng phí chọn ghế.
 -- seat_columns dùng '-' cho lối đi: 'ABC-DEF' (3-3), 'A-DG-K' (1-2-1).
+-- Chia khoang thành nhiều dải để định giá theo khu: hàng đầu, cửa thoát hiểm, ghế thường.
 -- Thêm một dòng => trigger tự sinh ghế vào bảng seats.
 CREATE TABLE cabin_layouts (
     id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -57,6 +58,7 @@ CREATE TABLE cabin_layouts (
     first_row    int  NOT NULL CHECK (first_row > 0),
     last_row     int  NOT NULL,
     seat_columns text NOT NULL CHECK (seat_columns ~ '^[A-Z]+(-[A-Z]+)*$'),
+    seat_fee     numeric(12,2) NOT NULL DEFAULT 0 CHECK (seat_fee >= 0),   -- phí chọn trước ghế
     CHECK (last_row >= first_row)
 );
 
@@ -70,6 +72,7 @@ CREATE TABLE seats (
     grid_col    smallint NOT NULL,            -- vị trí cột trên lưới (tính cả lối đi) để vẽ sơ đồ
     cabin_class text     NOT NULL CHECK (cabin_class IN ('ECONOMY', 'BUSINESS')),
     seat_type   text     NOT NULL CHECK (seat_type IN ('WINDOW', 'MIDDLE', 'AISLE')),
+    seat_fee    numeric(12,2) NOT NULL DEFAULT 0,
     UNIQUE (model_code, seat_row, seat_letter)
 );
 
@@ -159,17 +162,35 @@ CREATE FUNCTION gen_pnr() RETURNS char(6) LANGUAGE sql VOLATILE AS $$
     FROM generate_series(1, 6);
 $$;
 
+CREATE TABLE vouchers (                       -- mã giảm giá
+    code           text PRIMARY KEY CHECK (code ~ '^[A-Z0-9]{3,20}$'),
+    description    text          NOT NULL,
+    discount_type  text          NOT NULL CHECK (discount_type IN ('PERCENT', 'AMOUNT')),
+    discount_value numeric(12,2) NOT NULL CHECK (discount_value > 0),
+    max_discount   numeric(12,2),                 -- trần giảm cho loại PERCENT
+    min_amount     numeric(12,2) NOT NULL DEFAULT 0,   -- giá trị đơn tối thiểu
+    valid_from     timestamptz   NOT NULL DEFAULT now(),
+    valid_to       timestamptz   NOT NULL,
+    usage_limit    int           NOT NULL CHECK (usage_limit > 0),
+    used_count     int           NOT NULL DEFAULT 0,
+    is_public      boolean       NOT NULL DEFAULT true,   -- hiện ở trang chủ
+    CHECK (discount_type = 'AMOUNT' OR discount_value <= 100),
+    CHECK (used_count <= usage_limit)              -- chống vượt lượt dùng khi nhiều người áp mã cùng lúc
+);
+
 CREATE TABLE bookings (
-    id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    pnr           char(6)       NOT NULL UNIQUE DEFAULT gen_pnr(),   -- mã đặt chỗ
-    user_id       bigint        NOT NULL REFERENCES users (id),
-    contact_email text          NOT NULL,
-    contact_phone text          NOT NULL,
-    status        text          NOT NULL DEFAULT 'PENDING'
-                  CHECK (status IN ('PENDING', 'CONFIRMED', 'CANCELLED', 'EXPIRED')),
-    total_amount  numeric(12,2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
-    expires_at    timestamptz,                -- hạn thanh toán khi PENDING
-    created_at    timestamptz   NOT NULL DEFAULT now()
+    id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    pnr             char(6)       NOT NULL UNIQUE DEFAULT gen_pnr(),   -- mã đặt chỗ
+    user_id         bigint        NOT NULL REFERENCES users (id),
+    contact_email   text          NOT NULL,
+    contact_phone   text          NOT NULL,
+    status          text          NOT NULL DEFAULT 'PENDING'
+                    CHECK (status IN ('PENDING', 'CONFIRMED', 'CANCELLED', 'EXPIRED')),
+    total_amount    numeric(12,2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0),   -- sau giảm giá
+    voucher_code    text          REFERENCES vouchers (code),
+    discount_amount numeric(12,2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
+    expires_at      timestamptz,              -- hạn thanh toán khi PENDING
+    created_at      timestamptz   NOT NULL DEFAULT now()
 );
 CREATE INDEX ix_bookings_user ON bookings (user_id);
 CREATE INDEX ix_bookings_pending ON bookings (expires_at) WHERE status = 'PENDING';
@@ -194,8 +215,9 @@ CREATE TABLE tickets (
     passenger_id   bigint        NOT NULL REFERENCES passengers (id) ON DELETE CASCADE,
     flight_id      bigint        NOT NULL,
     fare_class     text          NOT NULL,
-    flight_seat_id bigint,                    -- NULL: em bé / chưa chọn ghế
-    price          numeric(12,2) NOT NULL CHECK (price >= 0),
+    flight_seat_id bigint,                    -- NULL: em bé / chưa chọn ghế (xếp tự động khi check-in)
+    price          numeric(12,2) NOT NULL CHECK (price >= 0),   -- giá vé theo loại khách
+    seat_fee       numeric(12,2) NOT NULL DEFAULT 0 CHECK (seat_fee >= 0),
     status         text          NOT NULL DEFAULT 'PENDING'
                    CHECK (status IN ('PENDING', 'ISSUED', 'CHECKED_IN', 'BOARDED', 'CANCELLED')),
     checked_in_at  timestamptz,
@@ -223,3 +245,27 @@ CREATE TABLE payments (
     paid_at         timestamptz
 );
 CREATE INDEX ix_payments_booking ON payments (booking_id);
+
+-- ---------------------------------------------------------------------
+-- 5. DỊCH VỤ BỔ TRỢ: hành lý mua thêm, suất ăn, bảo hiểm, SIM du lịch
+-- ---------------------------------------------------------------------
+CREATE TABLE ancillary_products (
+    code               text PRIMARY KEY,
+    category           text          NOT NULL CHECK (category IN ('BAGGAGE', 'MEAL', 'INSURANCE', 'SIM')),
+    name               text          NOT NULL,
+    description        text,
+    price              numeric(12,2) NOT NULL CHECK (price >= 0),
+    per_segment        boolean       NOT NULL,   -- true: mua theo từng chặng; false: một lần cho cả hành trình
+    international_only boolean       NOT NULL DEFAULT false,   -- SIM chỉ bán cho chặng quốc tế
+    is_active          boolean       NOT NULL DEFAULT true
+);
+
+CREATE TABLE booking_ancillaries (
+    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    booking_id   bigint        NOT NULL REFERENCES bookings (id) ON DELETE CASCADE,
+    passenger_id bigint        NOT NULL REFERENCES passengers (id) ON DELETE CASCADE,
+    flight_id    bigint        REFERENCES flights (id),   -- NULL với dịch vụ theo hành trình
+    product_code text          NOT NULL REFERENCES ancillary_products (code),
+    price        numeric(12,2) NOT NULL CHECK (price >= 0)
+);
+CREATE INDEX ix_booking_ancillaries_booking ON booking_ancillaries (booking_id);

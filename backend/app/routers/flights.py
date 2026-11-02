@@ -9,6 +9,7 @@ router = APIRouter(prefix="/api", tags=["flights"])
 
 # shortcut: ngày/giờ lọc theo giờ Việt Nam; khi mở rộng bay quốc tế thì dùng airports.timezone của sân bay đi.
 LOCAL_DATE = "(f.departure_time AT TIME ZONE 'Asia/Ho_Chi_Minh')::date"
+MAX_HOLDS_PER_FLIGHT = 9  # chống một tài khoản giữ hết ghế của chuyến bay
 
 
 @router.get("/airports")
@@ -22,7 +23,8 @@ def airports(db=Depends(get_db)):
 
 @router.get("/flights/search")
 def search(origin: str, destination: str, date: dt.date, passengers: int = Query(1, ge=1, le=9), db=Depends(get_db)):
-    """Mỗi dòng = 1 chuyến x 1 hạng vé. Lọc hãng / hạng / giá / khung giờ làm ở frontend."""
+    """Mỗi dòng = 1 chuyến x 1 hạng vé. passengers = số ghế cần (người lớn + trẻ em).
+    Lọc hãng / hạng / giá / khung giờ làm ở frontend."""
     return db.execute("""
         SELECT * FROM v_flight_search f
         WHERE origin = %s AND destination = %s AND """ + LOCAL_DATE + """ = %s
@@ -30,10 +32,36 @@ def search(origin: str, destination: str, date: dt.date, passengers: int = Query
         ORDER BY departure_time, price""", (origin.upper(), destination.upper(), date, passengers)).fetchall()
 
 
+@router.get("/flights/fare-calendar")
+def fare_calendar(origin: str, destination: str, date_from: dt.date, days: int = Query(7, ge=1, le=31),
+                  passengers: int = Query(1, ge=1, le=9), db=Depends(get_db)):
+    """Giá thấp nhất mỗi ngày (lịch giá rẻ)."""
+    return db.execute("""
+        SELECT """ + LOCAL_DATE + """ AS date, min(price) AS min_price
+        FROM v_flight_search f
+        WHERE origin = %s AND destination = %s AND """ + LOCAL_DATE + """ BETWEEN %s AND %s
+          AND departure_time > now() AND status <> 'CANCELLED' AND seats_available >= %s
+        GROUP BY 1 ORDER BY 1""",
+        (origin.upper(), destination.upper(), date_from, date_from + dt.timedelta(days=days - 1), passengers)).fetchall()
+
+
+@router.get("/ancillaries")
+def ancillaries(db=Depends(get_db)):
+    return db.execute("SELECT * FROM ancillary_products WHERE is_active ORDER BY category, price").fetchall()
+
+
+@router.get("/vouchers/public")
+def public_vouchers(db=Depends(get_db)):
+    return db.execute("""
+        SELECT code, description, valid_to FROM vouchers
+        WHERE is_public AND now() BETWEEN valid_from AND valid_to AND used_count < usage_limit
+        ORDER BY valid_to""").fetchall()
+
+
 @router.get("/flights/{flight_id}/seats")
 def seat_map(flight_id: int, user=Depends(optional_user), db=Depends(get_db)):
     return db.execute("""
-        SELECT flight_seat_id, seat_code, seat_row, seat_letter, grid_col, cabin_class, seat_type, status,
+        SELECT flight_seat_id, seat_code, seat_row, seat_letter, grid_col, cabin_class, seat_type, seat_fee, status,
                (status = 'HELD' AND held_by IS NOT DISTINCT FROM %s) AS mine
         FROM v_seat_map WHERE flight_id = %s
         ORDER BY seat_row, grid_col""", (user and user["id"], flight_id)).fetchall()
@@ -41,6 +69,13 @@ def seat_map(flight_id: int, user=Depends(optional_user), db=Depends(get_db)):
 
 @router.post("/seats/{flight_seat_id}/hold")
 def hold(flight_seat_id: int, user=Depends(current_user), db=Depends(get_db)):
+    held = db.execute("""
+        SELECT count(*) AS n FROM flight_seats
+        WHERE flight_id = (SELECT flight_id FROM flight_seats WHERE id = %s) AND id <> %s
+          AND status = 'HELD' AND held_by = %s AND hold_expires_at > now()""",
+        (flight_seat_id, flight_seat_id, user["id"])).fetchone()["n"]
+    if held >= MAX_HOLDS_PER_FLIGHT:
+        raise HTTPException(409, f"Mỗi tài khoản chỉ được giữ tối đa {MAX_HOLDS_PER_FLIGHT} ghế trên một chuyến bay")
     row = db.execute("""
         SELECT hold_seat(fs.id, %s) AS ok
         FROM flight_seats fs JOIN flights f ON f.id = fs.flight_id

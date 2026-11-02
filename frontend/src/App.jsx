@@ -11,6 +11,7 @@ import FlightStatus from './pages/FlightStatus.jsx'
 import Login from './pages/Login.jsx'
 import Staff from './pages/Staff.jsx'
 import Admin from './pages/Admin.jsx'
+import ChatWidget from './components/ChatWidget.jsx'
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -36,12 +37,13 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/booking" element={<RequireAuth><Booking /></RequireAuth>} />
             <Route path="/bookings" element={<RequireAuth><MyBookings /></RequireAuth>} />
-            <Route path="/bookings/:pnr" element={<RequireAuth><BookingDetail /></RequireAuth>} />
+            <Route path="/bookings/:pnr" element={<BookingDetail />} />
             <Route path="/staff" element={<RequireAuth roles={['STAFF', 'ADMIN']}><Staff /></RequireAuth>} />
             <Route path="/admin" element={<RequireAuth roles={['ADMIN']}><Admin /></RequireAuth>} />
             <Route path="*" element={<p>Không tìm thấy trang.</p>} />
           </Routes>
         </main>
+        <ChatWidget />
       </BrowserRouter>
     </AuthContext.Provider>
   )
@@ -63,6 +65,7 @@ function Header() {
       <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-1 px-4 py-2">
         <Link to="/" className="mr-4 text-lg font-bold text-white">✈ SkyBooking</Link>
         <NavLink to="/" end className={link}>Tìm chuyến bay</NavLink>
+        <Link to="/?tab=manage" className={link({ isActive: false })}>Quản lý đặt chỗ</Link>
         <NavLink to="/status" className={link}>Trạng thái chuyến bay</NavLink>
         {user && <NavLink to="/bookings" className={link}>Vé của tôi</NavLink>}
         {['STAFF', 'ADMIN'].includes(user?.role) && <NavLink to="/staff" className={link}>Nhân viên</NavLink>}

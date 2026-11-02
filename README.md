@@ -1,8 +1,10 @@
 # SkyBooking — Hệ thống quản lý và đặt vé máy bay
 
-Đề tài **Xây dựng hệ thống website quản lý và đặt vé máy bay**: tìm kiếm chuyến bay, sơ đồ ghế theo
-chủng loại máy bay, giữ ghế chống xung đột khi nhiều người đặt cùng lúc, đặt chỗ (PNR), vé điện tử,
-thanh toán, check-in, trạng thái chuyến bay realtime, báo cáo doanh thu / tỷ lệ lấp đầy ghế.
+Đề tài **Xây dựng hệ thống website quản lý và đặt vé máy bay**: tìm kiếm chuyến bay, lịch giá rẻ, sơ đồ ghế
+theo chủng loại máy bay (có phí chọn ghế theo khu), giữ ghế chống xung đột khi nhiều người đặt cùng lúc, dịch vụ
+bổ trợ (hành lý, suất ăn, bảo hiểm, SIM du lịch), mã giảm giá, đặt chỗ (PNR), vé điện tử qua email, đổi / huỷ
+vé và hoàn tiền, check-in có thẻ lên máy bay QR, trạng thái chuyến bay realtime, trợ lý ảo (chatbot) và báo cáo
+doanh thu / tỷ lệ lấp đầy ghế.
 
 **Công nghệ:** PostgreSQL 14+ · Python FastAPI + psycopg 3 (SQL thuần, logic giữ ghế nằm trong hàm
 PostgreSQL) · React 19 + Vite + Tailwind CSS.
@@ -18,11 +20,15 @@ backend/                  API FastAPI
   app/main.py             Khởi tạo app, xử lý lỗi nghiệp vụ từ PostgreSQL
   app/auth.py             JWT, bcrypt, phân quyền theo vai trò
   app/realtime.py         SSE trạng thái chuyến bay (LISTEN/NOTIFY) + job dọn ghế giữ quá hạn
+  app/pricing.py          Tính giá (loại khách, phí ghế, dịch vụ, voucher), tiền hoàn, phí đổi vé
+  app/mailer.py           Gửi email vé điện tử / huỷ / đổi / hãng huỷ chuyến (SMTP hoặc lưu file)
+  app/chatbot.py          Trợ lý ảo theo luật: hiểu câu tìm chuyến tự nhiên + hỏi đáp chính sách
   app/routers/            auth · flights · bookings · staff · admin
-  tests/test_api.py       Kiểm thử luồng đặt vé end-to-end
+  tests/                  test_api (luồng đặt vé), test_features (chức năng nâng cấp), test_chatbot
 frontend/                 Giao diện React
-  src/pages/              Trang tìm chuyến, kết quả, đặt vé, vé của tôi, trạng thái, nhân viên, quản trị
-  src/components/SeatMap.jsx   Sơ đồ ghế dạng lưới
+  src/pages/              Trang chủ (mua vé / quản lý đặt chỗ / làm thủ tục), kết quả, đặt vé 4 bước,
+                          chi tiết đặt chỗ, vé của tôi, trạng thái, nhân viên, quản trị
+  src/components/         SeatMap (sơ đồ ghế dạng lưới) · ChatWidget (khung chat trợ lý ảo)
 scripts/import_openflights.sql Nạp toàn bộ sân bay từ OpenFlights (tuỳ chọn)
 tests/test_concurrency.py      Kiểm thử 50 người cùng giữ / cùng thanh toán một ghế
 docker-compose.yml             PostgreSQL cho môi trường phát triển
@@ -58,6 +64,13 @@ fastapi dev app/main.py
 Mặc định kết nối `postgresql://postgres:postgres@localhost:5432/flight_booking`; đổi bằng biến môi trường
 `DATABASE_URL`, `SECRET_KEY` (xem `backend/.env.example`).
 
+**Email vé điện tử:** chưa cấu hình SMTP thì email được lưu thành file `.html` trong `backend/outbox/`
+(mở bằng trình duyệt để demo). Gửi thật qua Gmail: tạo *App password* rồi đặt biến môi trường
+`SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER=<gmail>`, `SMTP_PASSWORD=<app password>`.
+
+**Cập nhật database khi có schema mới:** trong VS Code chạy task *Nạp lại database mẫu*
+(xoá dữ liệu cũ và tạo lại từ đầu).
+
 **3. Frontend** (http://localhost:5173, tự chuyển tiếp `/api` sang backend)
 
 ```bash
@@ -82,28 +95,54 @@ python tests/test_concurrency.py
 
 | Vai trò | Trang | Chức năng |
 |---|---|---|
-| Hành khách | Tìm chuyến bay | Một chiều / khứ hồi, điểm đi, điểm đến, ngày, số khách |
-| | Kết quả | Lọc theo hãng, hạng vé (Phổ thông / Thương gia), giá tối đa, khung giờ cất / hạ cánh |
-| | Đặt vé | Sơ đồ ghế dạng lưới theo loại máy bay, giữ ghế 15 phút, nhập thông tin hành khách |
-| | Vé của tôi | Lịch sử đặt chỗ, thanh toán (VNPAY / MoMo / ZaloPay / thẻ — mô phỏng), vé điện tử, check-in online (24h–1h trước giờ bay) |
+| Hành khách | Trang chủ | 3 tab *Mua vé / Quản lý đặt chỗ / Làm thủ tục*; một chiều / khứ hồi; người lớn, trẻ em (2–11), em bé (<2); khuyến mãi đang có |
+| | Kết quả | Lịch giá rẻ 7 ngày; lọc theo hãng, hạng vé, giá tối đa, khung giờ cất / hạ cánh |
+| | Đặt vé (4 bước) | Hành khách → chọn ghế (tuỳ chọn, phí theo khu: hàng đầu / cửa thoát hiểm / thường) → dịch vụ bổ trợ (hành lý 20–40kg, suất ăn, bảo hiểm, **SIM du lịch** cho chặng quốc tế) → mã giảm giá & xác nhận; bảng giá do backend tính |
+| | Quản lý đặt chỗ | Tra cứu bằng **PNR + họ** (không cần đăng nhập); thanh toán (VNPAY / MoMo / ZaloPay / thẻ — mô phỏng); **đổi chuyến** (phí đổi + chênh lệch giá); **huỷ vé, hoàn tiền** theo hạng vé; email vé điện tử |
+| | Làm thủ tục | Check-in 24h–1h trước giờ bay, **tự xếp ghế** nếu chưa chọn, **thẻ lên máy bay có mã QR** |
 | Mọi người | Trạng thái chuyến bay | Bảng Đúng giờ / Hoãn / Huỷ... cập nhật realtime |
-| Nhân viên | Nhân viên | Cập nhật trạng thái & giờ dự kiến, danh sách hành khách, làm thủ tục, xác nhận lên máy bay, tra cứu PNR |
-| Quản trị | Quản trị | Báo cáo doanh thu & tỷ lệ lấp đầy, tạo chuyến bay + giá vé, thêm sân bay / chủng loại máy bay (sinh sơ đồ ghế) / tàu bay, phân quyền & khoá tài khoản |
+| | Trợ lý ảo | Nút 💬 mọi trang: tìm chuyến bằng câu tự nhiên, hỏi hành lý / hoàn đổi / check-in / khuyến mãi / SIM, tra trạng thái chuyến |
+| Nhân viên | Nhân viên | Cập nhật trạng thái (chặn chuyển ngược, tự email khách khi hoãn / huỷ), danh sách hành khách, làm thủ tục (tự xếp ghế), xác nhận lên máy bay, tra cứu PNR |
+| Quản trị | Quản trị | Báo cáo doanh thu vé / thực thu / dịch vụ / giảm giá / tỷ lệ lấp đầy; lịch bay: tạo, **sửa giờ & giá** (tự email khách khi đổi giờ); **mã giảm giá**; sân bay, chủng loại máy bay (sinh sơ đồ ghế + phí ghế), tàu bay; phân quyền & khoá tài khoản |
+
+**Quy tắc nghiệp vụ chính** (đều kiểm tra ở backend):
+- Giá vé: trẻ em 90%, em bé 10% giá người lớn; em bé không có ghế riêng, mỗi người lớn kèm tối đa 1 em bé;
+  loại khách phải khớp tuổi tại ngày bay.
+- Mỗi tài khoản giữ tối đa 9 ghế / chuyến (chống giữ hết ghế); ghế giữ 15 phút.
+- Voucher: theo % (có trần) hoặc số tiền, đơn tối thiểu, hạn dùng, số lượt (tăng lượt an toàn khi nhiều người
+  áp cùng lúc; booking hết hạn thanh toán được trả lại lượt).
+- Huỷ vé: hoàn giá vé trừ phí hoàn của hạng vé (hạng không hoàn thì 0đ); phí ghế và dịch vụ không hoàn.
+  **Hãng huỷ chuyến: hoàn 100%** (cả phí ghế, dịch vụ) hoặc **đổi chuyến miễn phí**.
+- Đổi chuyến: cùng chặng, cùng hạng, trước giờ bay ≥ 3 tiếng; phí đổi theo hạng + chênh lệch giá.
+- Trạng thái chuyến bay chỉ đi tới: Theo lịch → Đúng giờ / Hoãn → Lên máy bay → Cất cánh → Hạ cánh (hoặc Huỷ).
+
+## Trợ lý ảo (chatbot theo luật)
+
+Không dùng mô hình AI bên ngoài: `backend/app/chatbot.py` nhận diện **ý định** bằng từ khoá và **trích thông tin**
+bằng biểu thức chính quy, rồi trả lời từ dữ liệu thật trong database.
+
+- Tìm chuyến: *"Tìm chuyến từ Hà Nội đi Đà Nẵng sáng thứ 7 tuần sau, giá dưới 1 triệu"* → hiểu điểm đi / đến
+  (tên thành phố, tên gọi khác như Sài Gòn / HCM, mã IATA), ngày (hôm nay, ngày mai, thứ 2…CN, tuần sau, dd/mm),
+  khung giờ (sáng / chiều / tối), giá (800k, 1.5tr, 1 triệu…), số khách, hạng vé.
+- Hỏi đáp: hành lý, hoàn / huỷ, đổi vé, check-in, chọn ghế, khuyến mãi, dịch vụ / SIM, thanh toán, vé trẻ em.
+- Tra trạng thái theo số hiệu chuyến (VJ515); tra đặt chỗ theo PNR (chỉ chủ booking đã đăng nhập).
+- Xử lý nhập nhằng khi bỏ dấu tiếng Việt: *tối/tôi*, *hoàn/hoãn*, *sáng/sang*, *vé/về* (có test riêng).
 
 ## API chính
 
 | Phương thức | Đường dẫn | Quyền |
 |---|---|---|
 | POST | `/api/auth/register`, `/api/auth/login` · GET `/api/auth/me` | — |
-| GET | `/api/airports`, `/api/flights/search?origin&destination&date&passengers` | — |
-| GET | `/api/flights/{id}/seats` | — |
+| GET | `/api/airports`, `/api/flights/search?origin&destination&date&passengers`, `/api/flights/fare-calendar` | — |
+| GET | `/api/flights/{id}/seats`, `/api/ancillaries`, `/api/vouchers/public` | — |
+| POST | `/api/bookings/quote` (bảng giá chi tiết), `/api/chat` (trợ lý ảo) | — |
 | POST / DELETE | `/api/seats/{flight_seat_id}/hold` | Đăng nhập |
-| POST | `/api/bookings` · GET `/api/bookings`, `/api/bookings/{pnr}` | Đăng nhập |
-| POST | `/api/bookings/{pnr}/pay`, `/api/tickets/{id}/check-in` | Chủ booking |
+| POST | `/api/bookings` · GET `/api/bookings` | Đăng nhập |
+| GET / POST | `/api/bookings/{pnr}`, `/pay`, `/cancel`, `/change` · `/api/tickets/{id}/check-in` | Chủ booking, hoặc `?last_name=` (PNR + họ) |
 | GET | `/api/flight-status?date`, `/api/flight-status/stream` (SSE) | — |
 | PATCH | `/api/staff/flights/{id}/status` · GET `/api/staff/flights/{id}/passengers` | Nhân viên, Quản trị |
 | POST | `/api/staff/tickets/{id}/check-in`, `/api/staff/tickets/{id}/board` | Nhân viên, Quản trị |
-| GET / POST / PATCH | `/api/admin/catalog`, `/flights`, `/airports`, `/aircraft-models`, `/aircraft`, `/reports`, `/users` | Quản trị |
+| GET / POST / PATCH | `/api/admin/catalog`, `/flights`, `/vouchers`, `/airports`, `/aircraft-models`, `/aircraft`, `/reports`, `/users` | Quản trị |
 
 ## Sơ đồ quan hệ (ERD)
 
@@ -128,17 +167,22 @@ erDiagram
     PASSENGERS ||--o{ TICKETS : "có"
     FLIGHT_FARES ||--o{ TICKETS : "áp giá"
     FLIGHT_SEATS ||--o{ TICKETS : "ngồi"
+    VOUCHERS ||--o{ BOOKINGS : "giảm giá"
+    BOOKINGS ||--o{ BOOKING_ANCILLARIES : "mua thêm"
+    PASSENGERS ||--o{ BOOKING_ANCILLARIES : "cho khách"
+    ANCILLARY_PRODUCTS ||--o{ BOOKING_ANCILLARIES : "dịch vụ"
 ```
 
 | Nhóm | Bảng | Vai trò |
 |---|---|---|
 | Người dùng | `users` | Tài khoản, phân quyền `PASSENGER` / `STAFF` / `ADMIN` |
 | Danh mục | `airports`, `airlines` | Sân bay theo mã IATA (OpenFlights), hãng bay |
-| Đội bay & ghế | `aircraft_models`, `cabin_layouts`, `seats`, `aircraft` | Chủng loại máy bay, bố cục khoang (`'ABC-DEF'`, `'A-DG-K'`), ghế sinh tự động, tàu bay |
+| Đội bay & ghế | `aircraft_models`, `cabin_layouts`, `seats`, `aircraft` | Chủng loại máy bay, bố cục khoang (`'ABC-DEF'`, `'A-DG-K'`) kèm phí chọn ghế theo khu, ghế sinh tự động, tàu bay |
 | Chuyến bay | `flights`, `flight_status_history` | Lịch bay, trạng thái (Đúng giờ / Hoãn / Huỷ...), nhật ký đổi trạng thái |
 | Giá vé | `fare_classes`, `flight_fares` | Hạng vé + chính sách hành lý / đổi / hoàn; giá theo chuyến |
 | Tồn kho ghế | `flight_seats` | Trạng thái từng ghế của từng chuyến: `AVAILABLE` / `HELD` / `BOOKED` / `BLOCKED` |
-| Đặt chỗ | `bookings`, `passengers`, `tickets`, `payments` | Mã đặt chỗ PNR, hành khách, vé điện tử (1 khách × 1 chặng), giao dịch thanh toán |
+| Đặt chỗ | `bookings`, `passengers`, `tickets`, `payments` | Mã đặt chỗ PNR, hành khách, vé điện tử (1 khách × 1 chặng, có phí ghế), thanh toán / hoàn tiền |
+| Bán thêm | `ancillary_products`, `booking_ancillaries`, `vouchers` | Hành lý, suất ăn, bảo hiểm, SIM (theo chặng / cả hành trình); mã giảm giá |
 
 **View sẵn cho backend:** `v_flight_search` (tìm & lọc chuyến), `v_seat_map` (sơ đồ ghế dạng lưới),
 `v_flight_load_factor` (tỷ lệ lấp đầy), `v_revenue_daily` (doanh thu theo ngày bay, hãng).
@@ -160,8 +204,10 @@ AVAILABLE --hold_seat()--> HELD --confirm_booking()--> BOOKED
   ghế là huỷ toàn bộ. Đồng thời kiểm tra ghế đúng khoang của hạng vé đã mua.
 - **Lưới an toàn cuối cùng:** unique index `uq_tickets_seat_issued` — một ghế không bao giờ có 2 vé
   đã xuất, kể cả khi code ứng dụng sai.
-- **`release_expired_holds()`**: gọi định kỳ (~1 phút) để huỷ booking quá hạn thanh toán và trả ghế.
-  Việc giữ ghế vẫn đúng kể cả khi job chưa chạy, vì ghế hết hạn được coi là trống.
+- **`release_expired_holds()`**: gọi định kỳ (~1 phút) để huỷ booking quá hạn thanh toán, trả ghế và trả
+  lượt dùng voucher. Việc giữ ghế vẫn đúng kể cả khi job chưa chạy, vì ghế hết hạn được coi là trống.
+- **`assign_seat(ticket)`**: xếp ghế tự động khi check-in bằng `SELECT … FOR UPDATE SKIP LOCKED` — nhiều khách
+  check-in cùng lúc không chờ nhau và không bao giờ nhận trùng ghế.
 
 Kết quả `tests/test_concurrency.py` (50 luồng, mỗi luồng một kết nối, xuất phát cùng lúc):
 
@@ -192,9 +238,10 @@ Luồng nền này cũng gọi `release_expired_holds()` mỗi phút.
 - **Cổng thanh toán đang mô phỏng** (`backend/app/routers/bookings.py`, hàm `pay`). Tích hợp VNPAY/MoMo
   sandbox: tạo URL thanh toán, nhận IPN, kiểm tra chữ ký HMAC rồi chạy đúng transaction đó;
   `payments.provider_txn_id` unique chống xử lý IPN trùng.
-- Chưa có: huỷ / đổi vé có hoàn tiền, giá riêng cho trẻ em / em bé, giới hạn số ghế giữ mỗi người,
-  chatbot AI (có thể đọc `fare_classes.description` và `v_flight_search`).
-- Ngày giờ hiển thị và lọc theo giờ Việt Nam.
+- Chưa có: huỷ một phần (một khách / một chặng), đổi tên hành khách, thẻ thành viên / tích điểm, đa ngôn ngữ,
+  hành trình nhiều chặng.
+- Ngày giờ hiển thị và lọc theo giờ Việt Nam (giờ hạ cánh chặng quốc tế cũng hiển thị theo giờ Việt Nam).
+- Triển khai thật: đặt `APP_ENV=production` và `SECRET_KEY` riêng (server từ chối chạy nếu thiếu).
 - Bản build: `npm run build` tạo `frontend/dist/`; khi triển khai, đặt sau reverse proxy (nginx) cùng
   backend, chuyển `/api` sang FastAPI.
 - Danh mục sân bay đầy đủ: tải `airports.dat` từ OpenFlights rồi chạy `scripts/import_openflights.sql`.
