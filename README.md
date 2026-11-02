@@ -141,6 +141,46 @@ Sửa code xong chỉ cần lưu (`Ctrl+S`): giao diện tự cập nhật, back
 | Task nạp database báo không tìm thấy `psql.exe` | Máy cài PostgreSQL khác bản 17 — sửa số `17` trong `.vscode/tasks.json` cho đúng phiên bản |
 | Backend báo không kết nối được database | Kiểm tra dịch vụ `postgresql-x64-17` đang chạy (Windows → Services) và mật khẩu `postgres` |
 
+## Làm việc nhóm trên GitHub
+
+| Nhánh | Vai trò | Ai được sửa |
+|---|---|---|
+| `main` | **Bản gốc ổn định** (bản nộp / demo). Không sửa trực tiếp | Chỉ trưởng nhóm gộp `develop` vào khi cả nhóm đã chạy thử ổn |
+| `develop` | **Bản làm việc chung của nhóm** | Chỉ nhận code qua Pull Request |
+| `feature/<việc>` | Nhánh riêng của từng người cho từng việc | Người làm việc đó |
+
+**Bắt đầu một việc mới:**
+```bash
+git checkout develop
+```
+```bash
+git pull
+```
+```bash
+git checkout -b feature/hinh-anh-diem-den
+```
+
+**Làm xong:** commit (`Ctrl+Shift+G` → **Commit**), đẩy nhánh lên rồi tạo Pull Request:
+```bash
+git push -u origin feature/hinh-anh-diem-den
+```
+Trên GitHub bấm **Compare & pull request** → ở ô **base** chọn **`develop`** (không chọn `main`) → chọn một người
+review → người review duyệt thì bấm **Merge**.
+
+**Mỗi ngày lấy code mới của nhóm về nhánh của mình:**
+```bash
+git pull origin develop
+```
+Bị xung đột (conflict) thì mở file bị đánh dấu trong VS Code → **Resolve in Merge Editor** → chọn phần giữ lại → commit.
+
+**Quy tắc:**
+- Không push thẳng vào `develop` hay `main`; mỗi Pull Request một việc, càng nhỏ càng dễ review.
+- Trước khi tạo Pull Request: chạy test (biểu tượng **Testing**) và `npm run build` trong `frontend` không lỗi.
+- Sửa `database/*.sql` thì ghi rõ trong Pull Request: *"Sau khi pull cần chạy task Nạp lại database mẫu"*.
+- Không commit `node_modules/`, `.venv/`, `backend/outbox/` (đã có trong `.gitignore`).
+- Ảnh dùng ảnh tự chụp hoặc ảnh miễn phí bản quyền (Unsplash, Pexels), tải về để trong `frontend/public/images/`
+  (không dùng link ảnh trang khác) và ghi nguồn ảnh.
+
 ## Chức năng
 
 | Vai trò | Trang | Chức năng |
