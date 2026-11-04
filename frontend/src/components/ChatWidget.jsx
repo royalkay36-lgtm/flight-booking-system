@@ -16,6 +16,12 @@ export default function ChatWidget() {
   const [busy, setBusy] = useState(false)
   const end = useRef(null)
   useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, open])
+  // Menu điện thoại và footer mở chat bằng openChat() trong ui.jsx
+  useEffect(() => {
+    const show = () => setOpen(true)
+    window.addEventListener('open-chat', show)
+    return () => window.removeEventListener('open-chat', show)
+  }, [])
 
   const send = async (text) => {
     if (!text.trim() || busy) return
@@ -35,7 +41,7 @@ export default function ChatWidget() {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)} aria-label="Mở trợ lý ảo"
-        className="rise [animation-delay:800ms] fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-strong text-white shadow-lg hover:bg-brand-ink">
+        className="rise [animation-delay:800ms] fixed bottom-5 right-5 z-40 hidden h-14 w-14 lg:flex items-center justify-center rounded-full bg-brand-strong text-white shadow-lg hover:bg-brand-ink">
         <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
           <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
         </svg>

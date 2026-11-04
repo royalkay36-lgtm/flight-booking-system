@@ -35,6 +35,18 @@ def send_email(to: str, subject: str, body_html: str):
         smtp.send_message(msg)
 
 
+def send_reset_email(to: str, full_name: str, link: str):
+    """Chạy nền (BackgroundTasks); lỗi gửi mail chỉ ghi log, người dùng vẫn nhận thông báo chung."""
+    body = (f"<p>Chào {html.escape(full_name)},</p>"
+            "<p>Bạn (hoặc ai đó) vừa yêu cầu đặt lại mật khẩu SkyBooking. Link dưới đây dùng được trong 30 phút:</p>"
+            f"<p><a href='{html.escape(link)}'>Đặt lại mật khẩu</a></p>"
+            "<p>Nếu bạn không yêu cầu, hãy bỏ qua email này; mật khẩu hiện tại vẫn giữ nguyên.</p>")
+    try:
+        send_email(to, "Đặt lại mật khẩu SkyBooking", body)
+    except Exception:
+        log.exception("Gửi email đặt lại mật khẩu thất bại")
+
+
 def notify_booking(pnr: str, subject: str, message: str):
     """Chạy nền sau khi trả response (BackgroundTasks): tự lấy kết nối DB riêng, lỗi gửi mail không ảnh hưởng đặt vé."""
     try:

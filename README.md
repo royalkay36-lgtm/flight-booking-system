@@ -67,6 +67,8 @@ Mặc định kết nối `postgresql://postgres:postgres@localhost:5432/flight_
 **Email vé điện tử:** chưa cấu hình SMTP thì email được lưu thành file `.html` trong `backend/outbox/`
 (mở bằng trình duyệt để demo). Gửi thật qua Gmail: tạo *App password* rồi đặt biến môi trường
 `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER=<gmail>`, `SMTP_PASSWORD=<app password>`.
+Email **quên mật khẩu** cũng đi đường này; link trong email ghép từ biến `FRONTEND_URL`
+(mặc định `http://localhost:5173`, bản Vercel đặt `https://skybooking-indol.vercel.app`).
 
 **Cập nhật database khi có schema mới:** trong VS Code chạy task *Nạp lại database mẫu*
 (xoá dữ liệu cũ và tạo lại từ đầu).
@@ -181,6 +183,18 @@ Bị xung đột (conflict) thì mở file bị đánh dấu trong VS Code → *
 - Ảnh dùng ảnh tự chụp hoặc ảnh miễn phí bản quyền (Unsplash, Pexels), tải về để trong `frontend/public/images/`
   (không dùng link ảnh trang khác) và ghi nguồn ảnh.
 
+**Giao diện chung (phần A), trang mới nên dùng lại thay vì tự viết:**
+
+| Dùng | Ở đâu | Ghi chú |
+|---|---|---|
+| `text-meta` 13px · `text-ui` 15px · `text-lead` 20px · `text-title` 28px | `index.css` | Chỉ 4 cỡ chữ; tránh `text-sm`, `text-lg`, `text-[17px]`… |
+| `<PageHeader title="…" actions={…}>mô tả</PageHeader>` | `ui.jsx` | Mỗi trang một tiêu đề `h1` |
+| `.btn` · `.btn-outline` · `.input` · `.label` · `.card` · `.table` · `<Badge>` · `<ErrorText>` | `index.css`, `ui.jsx` | |
+| `.segmented` + `.segmented-item` (`<button aria-pressed>` hoặc `<label>` bọc radio) | `index.css` | Nút chuyển kiểu Mua vé / Quản lý…, Một chiều / Khứ hồi |
+| Màu `brand`, `brand-strong` (nền nút), `brand-ink` (chữ trên nền nhạt), `brand-tint`, `brand-wash`, `ink`, `muted`, `line` | `index.css` | Không dùng `sky-*`, `slate-*`, `indigo-*` trực tiếp |
+| `openChat()` | `ui.jsx` | Mở trợ lý ảo (dưới 1024px không có nút nổi) |
+| `<PasswordRules>` · `passwordOk()` | `ui.jsx` | Luật mật khẩu: ≥ 8 ký tự, có chữ, số, ký tự đặc biệt (khớp backend) |
+
 ## Chức năng
 
 | Vai trò | Trang | Chức năng |
@@ -191,7 +205,8 @@ Bị xung đột (conflict) thì mở file bị đánh dấu trong VS Code → *
 | | Quản lý đặt chỗ | Tra cứu bằng **PNR + họ** (không cần đăng nhập); thanh toán (VNPAY / MoMo / ZaloPay / thẻ — mô phỏng); **đổi chuyến** (phí đổi + chênh lệch giá); **huỷ vé, hoàn tiền** theo hạng vé; email vé điện tử |
 | | Làm thủ tục | Check-in 24h–1h trước giờ bay, **tự xếp ghế** nếu chưa chọn, **thẻ lên máy bay có mã QR** |
 | Mọi người | Trạng thái chuyến bay | Bảng Đúng giờ / Hoãn / Huỷ... cập nhật realtime |
-| | Trợ lý ảo | Nút 💬 mọi trang: tìm chuyến bằng câu tự nhiên, hỏi hành lý / hoàn đổi / check-in / khuyến mãi / SIM, tra trạng thái chuyến |
+| | Tài khoản | Đăng ký (mật khẩu ≥ 8 ký tự gồm chữ, số, ký tự đặc biệt) rồi quay về đăng nhập; **quên mật khẩu** gửi link đặt lại qua email (hạn 30 phút, dùng một lần) |
+| | Trợ lý ảo | Nút chat ở góc phải (máy tính) hoặc trong menu ☰ (điện thoại): tìm chuyến bằng câu tự nhiên, hỏi hành lý / hoàn đổi / check-in / khuyến mãi / SIM, tra trạng thái chuyến |
 | Nhân viên | Nhân viên | Cập nhật trạng thái (chặn chuyển ngược, tự email khách khi hoãn / huỷ), danh sách hành khách, làm thủ tục (tự xếp ghế), xác nhận lên máy bay, tra cứu PNR |
 | Quản trị | Quản trị | Báo cáo doanh thu vé / thực thu / dịch vụ / giảm giá / tỷ lệ lấp đầy; lịch bay: tạo, **sửa giờ & giá** (tự email khách khi đổi giờ); **mã giảm giá**; sân bay, chủng loại máy bay (sinh sơ đồ ghế + phí ghế), tàu bay; phân quyền & khoá tài khoản |
 
@@ -222,7 +237,7 @@ bằng biểu thức chính quy, rồi trả lời từ dữ liệu thật trong
 
 | Phương thức | Đường dẫn | Quyền |
 |---|---|---|
-| POST | `/api/auth/register`, `/api/auth/login` · GET `/api/auth/me` | — |
+| POST | `/api/auth/register`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password` · GET `/api/auth/me` | — |
 | GET | `/api/airports`, `/api/flights/search?origin&destination&date&passengers`, `/api/flights/fare-calendar` | — |
 | GET | `/api/flights/{id}/seats`, `/api/ancillaries`, `/api/vouchers/public` | — |
 | POST | `/api/bookings/quote` (bảng giá chi tiết), `/api/chat` (trợ lý ảo) | — |
