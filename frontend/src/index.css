@@ -21,37 +21,53 @@
   --color-brand-tint: #e0f2fe;    /* mục đang chọn, huy hiệu */
   --color-brand-wash: #f0f9ff;    /* mảng nền nhạt */
 
+  /* Thang cỡ chữ: chỉ 4 cỡ + 1 cỡ tiêu đề lớn ở trang chủ. Trang mới nên dùng các lớp text-meta/ui/lead/title */
+  --text-meta: 0.8125rem;   --text-meta--line-height: 1.25rem;   /* 13px: chú thích, nhãn phụ, ngày giờ nhỏ */
+  --text-ui: 0.9375rem;     --text-ui--line-height: 1.5rem;      /* 15px: chữ thường, nút, ô nhập, menu */
+  --text-lead: 1.25rem;     --text-lead--line-height: 1.75rem;   /* 20px: tiêu đề mục, đoạn dẫn */
+  --text-title: 1.75rem;    --text-title--line-height: 2.125rem; /* 28px: tiêu đề trang (h1) */
+
   --color-board: #101418;         /* bảng điện tử trạng thái chuyến bay */
   --color-board-row: #1a2027;
 }
 
 @layer base {
-  body { @apply bg-ground font-sans text-[15px] leading-6 text-ink antialiased; }
+  /* chữ số đều cột ở mọi nơi để giờ, giá tiền thẳng hàng */
+  body { @apply bg-ground font-sans text-ui text-ink antialiased; font-variant-numeric: tabular-nums; }
+  input[type="checkbox"], input[type="radio"] { accent-color: var(--color-brand-strong); }
   :focus-visible { @apply outline-2 outline-offset-2 outline-brand; }
   ::selection { @apply bg-brand-tint text-brand-ink; }
 }
 
 @layer components {
   .input {
-    @apply h-10 w-full rounded-xl border border-control bg-white px-3 text-[15px] text-ink placeholder:text-muted
+    @apply h-10 w-full rounded-xl border border-control bg-white px-3 text-ui text-ink placeholder:text-muted
       focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand-tint disabled:bg-ground;
   }
   .btn {
-    @apply inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-strong px-5 text-sm font-semibold text-white
-      transition-[background-color,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:bg-brand-ink
-      hover:shadow-[0_8px_20px_-8px_rgba(3,105,161,0.65)] active:translate-y-0 active:shadow-none
-      disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-none;
+    @apply inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-strong px-5 text-ui font-semibold text-white
+      transition-[background-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-brand-ink active:translate-y-0
+      disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0;
   }
   .btn-outline {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-full border border-control bg-white px-4 text-sm font-medium text-ink
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-full border border-control bg-white px-4 text-ui font-medium text-ink
       transition-colors hover:border-brand hover:bg-brand-wash active:translate-y-px disabled:opacity-60;
   }
   .card { @apply rounded-2xl border border-line bg-surface p-5; }
-  .label { @apply mb-1.5 block text-sm font-medium text-ink; }
-  .table { @apply w-full text-left text-sm; }
-  .table th { @apply px-3 pb-2 text-[13px] font-normal text-muted; }
+  .label { @apply mb-1.5 block text-ui font-medium text-ink; }
+  .table { @apply w-full text-left text-ui; }
+  .table th { @apply px-3 pb-2 text-meta font-normal text-muted; }
   .table td { @apply border-t border-rule px-3 py-3 align-middle; }
   .num { font-variant-numeric: tabular-nums; }
+
+  /* Nút chuyển kiểu "viên thuốc" (Mua vé / Quản lý..., Đăng nhập / Đăng ký, Một chiều / Khứ hồi).
+     Dùng <button aria-pressed> hoặc <label> bọc <input type=radio>. */
+  .segmented { @apply inline-flex max-w-full gap-1 rounded-full bg-ground p-1; }
+  .segmented-item {
+    @apply inline-flex min-h-9 cursor-pointer items-center justify-center whitespace-nowrap rounded-full px-4 text-ui font-medium
+      text-muted transition-colors hover:text-ink has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand;
+  }
+  .segmented-item[aria-pressed="true"], .segmented-item:has(:checked) { @apply bg-white text-ink ring-1 ring-line; }
 }
 
 /*
