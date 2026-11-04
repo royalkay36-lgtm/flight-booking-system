@@ -9,10 +9,10 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
-from .db import pool
+from .db import ON_VERCEL, pool
 
 log = logging.getLogger(__name__)
-OUTBOX = pathlib.Path(__file__).resolve().parent.parent / "outbox"
+OUTBOX = pathlib.Path("/tmp/outbox") if ON_VERCEL else pathlib.Path(__file__).resolve().parent.parent / "outbox"  # Vercel chỉ cho ghi /tmp
 TZ = dt.timezone(dt.timedelta(hours=7))
 
 

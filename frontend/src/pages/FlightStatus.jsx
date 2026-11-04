@@ -20,7 +20,10 @@ export default function FlightStatus() {
   useEffect(() => {
     setFlights(null)
     setError('')
-    api(`/flight-status?date=${date}`).then(setFlights).catch((e) => setError(e.message))
+    const load = () => api(`/flight-status?date=${date}`).then((f) => { setFlights(f); setError('') }).catch((e) => setError(e.message))
+    load()
+    const id = setInterval(load, 15000)  // dự phòng khi không có realtime (bản demo trên Vercel)
+    return () => clearInterval(id)
   }, [date])
 
   // Realtime: server đẩy sự kiện mỗi khi nhân viên đổi trạng thái chuyến bay
