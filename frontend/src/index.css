@@ -1,12 +1,53 @@
 @import "tailwindcss";
 
+/*
+  Phong cách "accent ladder": màu xanh thương hiệu ở độ đậm đầy đủ chỉ dùng cho điểm nhỏ
+  (logo, nút chính, dữ liệu chính, mục đang chọn); các mảng lớn dùng sắc nhạt của chính màu đó.
+*/
+@theme {
+  --font-sans: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-ground: #f4f8fb;        /* nền trang, ngả về sắc xanh nhạt nhất */
+  --color-surface: #ffffff;
+  --color-ink: #0f1720;
+  --color-muted: #536170;         /* chữ phụ, đạt 4.5:1 trên nền trắng và nền trang */
+  --color-line: #e2e9f0;          /* viền thẻ */
+  --color-rule: #edf2f6;          /* đường kẻ hàng trong bảng */
+  --color-control: #cbd6e0;       /* viền ô nhập, nút phụ */
+
+  --color-brand: #0284c7;         /* màu chủ đạo (giữ nguyên) */
+  --color-brand-strong: #0369a1;  /* nền nút chính: chữ trắng đạt 5.9:1 (trên #0284c7 chỉ 4.1:1) */
+  --color-brand-ink: #075985;     /* chữ trên nền xanh nhạt */
+  --color-brand-tint: #e0f2fe;    /* mục đang chọn, huy hiệu */
+  --color-brand-wash: #f0f9ff;    /* mảng nền nhạt */
+
+  --color-board: #101418;         /* bảng điện tử trạng thái chuyến bay */
+  --color-board-row: #1a2027;
+}
+
+@layer base {
+  body { @apply bg-ground font-sans text-[15px] leading-6 text-ink antialiased; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-brand; }
+  ::selection { @apply bg-brand-tint text-brand-ink; }
+}
+
 @layer components {
-  .input { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200; }
-  .btn { @apply inline-flex items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50; }
-  .btn-outline { @apply inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50; }
-  .card { @apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm; }
-  .label { @apply mb-1 block text-xs font-medium text-slate-500; }
+  .input {
+    @apply h-10 w-full rounded-xl border border-control bg-white px-3 text-[15px] text-ink placeholder:text-muted
+      focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand-tint disabled:bg-ground;
+  }
+  .btn {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-full bg-brand-strong px-5 text-sm font-semibold text-white
+      transition-colors hover:bg-brand-ink active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-outline {
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-full border border-control bg-white px-4 text-sm font-medium text-ink
+      transition-colors hover:border-brand hover:bg-brand-wash active:translate-y-px disabled:opacity-60;
+  }
+  .card { @apply rounded-2xl border border-line bg-surface p-5; }
+  .label { @apply mb-1.5 block text-sm font-medium text-ink; }
   .table { @apply w-full text-left text-sm; }
-  .table th { @apply border-b border-slate-200 px-2 py-2 text-xs font-medium uppercase text-slate-500; }
-  .table td { @apply border-b border-slate-100 px-2 py-2; }
+  .table th { @apply px-3 pb-2 text-[13px] font-normal text-muted; }
+  .table td { @apply border-t border-rule px-3 py-3 align-middle; }
+  .num { font-variant-numeric: tabular-nums; }
 }
