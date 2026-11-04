@@ -1,0 +1,21 @@
+# Render Blueprint: tạo backend FastAPI bằng New → Blueprint, chọn repo này.
+# Tên dịch vụ quyết định địa chỉ https://skybooking-api.onrender.com mà frontend/vercel.json đang trỏ tới;
+# đổi tên ở đây thì đổi luôn địa chỉ trong vercel.json.
+services:
+  - type: web
+    name: skybooking-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/airports
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false   # dán chuỗi kết nối Neon (bản KHÔNG pooled) khi Render hỏi
