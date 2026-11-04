@@ -31,6 +31,7 @@ export default function App() {
         <div className="flex min-h-screen flex-col">
           <Header />
           <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
+            <PageEnter>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/search" element={<Results />} />
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="/admin" element={<RequireAuth roles={['ADMIN']}><Admin /></RequireAuth>} />
               <Route path="*" element={<p>Không tìm thấy trang.</p>} />
             </Routes>
+            </PageEnter>
           </main>
           <Footer />
         </div>
@@ -50,6 +52,12 @@ export default function App() {
       </BrowserRouter>
     </AuthContext.Provider>
   )
+}
+
+// Mỗi lần đổi trang, nội dung trượt nhẹ lên (đổi tab ?tab= trong cùng trang thì không)
+function PageEnter({ children }) {
+  const { pathname } = useLocation()
+  return <div key={pathname} className="page-enter">{children}</div>
 }
 
 function RequireAuth({ roles, children }) {
@@ -97,19 +105,19 @@ function Header() {
     const [path, query] = to.split('?')
     return location.pathname === path && (query ? location.search === `?${query}` : !location.search.includes('tab='))
   }
-  const navCls = (to) => `rounded-full px-3.5 py-2 text-sm font-medium transition-colors ${
+  const navCls = (to) => `whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-medium transition-colors ${
     isActive(to) ? 'bg-brand-tint text-brand-ink' : 'text-ink hover:bg-brand-wash'}`
 
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-white">
+    <header className="sticky top-0 z-30 border-b border-line bg-white/85 backdrop-blur-md">
       <nav aria-label="Điều hướng chính" className="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4 sm:px-6">
         <Link to="/" className="mr-4 rounded-lg" aria-label="SkyBooking — trang chủ"><Logo /></Link>
 
-        <div className="hidden items-center gap-1 md:flex">
+        <div className="hidden items-center gap-1 lg:flex">
           {MAIN_LINKS.map(([to, label]) => <Link key={to} to={to} className={navCls(to)}>{label}</Link>)}
         </div>
 
-        <div className="ml-auto hidden md:block">
+        <div className="ml-auto hidden lg:block">
           {user ? (
             <div className="relative" ref={accountRef}>
               <button onClick={() => setAccountOpen((v) => !v)} aria-haspopup="menu" aria-expanded={accountOpen}
@@ -121,7 +129,7 @@ function Header() {
                 </svg>
               </button>
               {accountOpen && (
-                <div role="menu" className="absolute right-0 mt-2 w-64 rounded-2xl border border-line bg-white p-2 shadow-[0_12px_32px_rgba(15,23,32,0.12)]">
+                <div role="menu" className="pop-in absolute right-0 mt-2 w-64 rounded-2xl border border-line bg-white p-2 shadow-[0_12px_32px_rgba(15,23,32,0.12)]">
                   <div className="px-3 pb-2 pt-1">
                     <p className="truncate text-sm font-semibold">{user.full_name}</p>
                     <p className="truncate text-[13px] text-muted">{user.email} · {ROLE[user.role]}</p>
@@ -139,7 +147,7 @@ function Header() {
         </div>
 
         <button onClick={() => setMenuOpen((v) => !v)} aria-expanded={menuOpen} aria-controls="mobile-menu"
-          aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'} className="ml-auto grid h-10 w-10 place-items-center rounded-full hover:bg-brand-wash md:hidden">
+          aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'} className="ml-auto grid h-10 w-10 place-items-center rounded-full hover:bg-brand-wash lg:hidden">
           <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
             <path d={menuOpen ? 'M6 6l12 12M18 6L6 18' : 'M4 7h16M4 12h16M4 17h16'} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
@@ -147,7 +155,7 @@ function Header() {
       </nav>
 
       {menuOpen && (
-        <div id="mobile-menu" className="border-t border-line bg-white px-4 pb-5 pt-2 md:hidden">
+        <div id="mobile-menu" className="pop-in border-t border-line bg-white px-4 pb-5 pt-2 lg:hidden">
           {MAIN_LINKS.map(([to, label]) => (
             <Link key={to} to={to} className={`block rounded-xl px-3 py-3 text-base ${isActive(to) ? 'bg-brand-tint font-medium text-brand-ink' : ''}`}>{label}</Link>
           ))}
@@ -182,7 +190,8 @@ function Footer() {
       <div className="mx-auto grid max-w-6xl gap-10 px-4 pb-8 pt-12 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr]">
         <div className="max-w-sm">
           <Logo />
-          <p className="mt-4 text-[15px] text-muted">
+          <p className="mt-4 text-lg font-semibold text-brand-ink">Chạm để cất cánh.</p>
+          <p className="mt-2 text-[15px] text-muted">
             Đặt vé máy bay, chọn chỗ ngồi trên sơ đồ ghế, quản lý đặt chỗ và làm thủ tục trực tuyến ở một nơi.
           </p>
         </div>
@@ -205,11 +214,11 @@ function Footer() {
         </div>
       </div>
       <div className="mx-auto max-w-6xl overflow-hidden px-4 sm:px-6">
-        <p aria-hidden="true" className="select-none text-[clamp(56px,13vw,176px)] font-bold leading-[0.85] tracking-[-0.04em] text-brand">SkyBooking</p>
+        <p aria-hidden="true" className="reveal select-none text-[clamp(56px,13vw,176px)] font-bold leading-[0.85] tracking-[-0.04em] text-brand">SkyBooking</p>
       </div>
       <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-2 px-4 py-5 text-[13px] text-muted sm:px-6">
         <p>© 2026 SkyBooking · Đề tài xây dựng hệ thống website quản lý và đặt vé máy bay</p>
-        <p>Ảnh trang đăng nhập: “View airplane window vast mountainous”, CC0, qua rawpixel</p>
+        <p>Ảnh trang đăng nhập: “View airplane window vast mountainous”, CC0, qua rawpixel · Ảnh trang chủ: Joel Peralta, CC0, qua WordPress Photo Directory</p>
       </div>
     </footer>
   )

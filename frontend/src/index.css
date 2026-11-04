@@ -37,8 +37,10 @@
       focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand-tint disabled:bg-ground;
   }
   .btn {
-    @apply inline-flex h-10 items-center justify-center gap-2 rounded-full bg-brand-strong px-5 text-sm font-semibold text-white
-      transition-colors hover:bg-brand-ink active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60;
+    @apply inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-strong px-5 text-sm font-semibold text-white
+      transition-[background-color,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:bg-brand-ink
+      hover:shadow-[0_8px_20px_-8px_rgba(3,105,161,0.65)] active:translate-y-0 active:shadow-none
+      disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-none;
   }
   .btn-outline {
     @apply inline-flex h-9 items-center justify-center gap-2 rounded-full border border-control bg-white px-4 text-sm font-medium text-ink
@@ -50,4 +52,56 @@
   .table th { @apply px-3 pb-2 text-[13px] font-normal text-muted; }
   .table td { @apply border-t border-rule px-3 py-3 align-middle; }
   .num { font-variant-numeric: tabular-nums; }
+}
+
+/*
+  Chuyển động. Quy ước: mỗi màn hình chỉ một chuyển động chính (bảng lật chữ ở trang chủ),
+  còn lại là hiện dần nhẹ nhàng. Người dùng bật "giảm chuyển động" trong hệ điều hành thì tắt hết.
+*/
+:root { --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1); --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); }
+
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+@keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(0.97); } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes settle { from { transform: scale(1.08); } }
+@keyframes flash { from { background-color: rgba(143, 208, 250, 0.28); } to { background-color: transparent; } }
+@keyframes ping { 75%, 100% { transform: scale(2.4); opacity: 0; } }
+@keyframes fly { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+@keyframes glide { from { left: 0%; } to { left: calc(100% - 1.75rem); } }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+
+/* Trong layer để các lớp tiện ích như [animation-delay:..] ghi đè được; "backwards" để hết hiệu ứng thì không giữ transform */
+@layer components {
+  .page-enter { animation: rise 0.45s var(--ease-out) backwards; }
+  .pop-in { animation: pop 0.18s var(--ease-out) backwards; transform-origin: top right; }
+  .rise { animation: rise 0.6s var(--ease-out) backwards; }
+  .fade-in { animation: fade 0.8s ease-out backwards; }
+  .settle { animation: settle 2.4s var(--ease-out) both; }
+  .flash { animation: flash 2.4s ease-out both; }
+  .ping { animation: ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
+
+  /* Hiện dần khi cuộn tới (trình duyệt chưa hỗ trợ thì phần tử hiện luôn) */
+  @supports (animation-timeline: view()) {
+    .reveal { animation: rise linear backwards; animation-timeline: view(); animation-range: entry 0% entry 60%; }
+    /* Máy bay chạy dọc đường bay theo nhịp cuộn trang */
+    .scroll-glide { animation: glide linear both; animation-timeline: view(); animation-range: entry 40% cover 60%; }
+  }
+
+  /* Bảng lật chữ kiểu bảng giờ bay sân bay */
+  .flap {
+    display: inline-grid; place-items: center; min-width: 0.78em; height: 1.5em; line-height: 1.5; padding: 0 0.06em;
+    border-radius: 0.12em; background: #101418; color: #fff; position: relative;
+    box-shadow: inset 0 -0.05em 0 rgba(255, 255, 255, 0.06);
+  }
+  .flap::after { content: ""; position: absolute; inset: 50% 0 auto; height: 1px; background: rgba(0, 0, 0, 0.55); }
+  .flap[data-moving] { color: #8fd0fa; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+  }
+  .reveal { animation: none !important; }
+  .scroll-glide { animation: none !important; left: calc(100% - 1.75rem); }
 }

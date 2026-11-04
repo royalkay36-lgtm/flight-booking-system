@@ -29,7 +29,7 @@ export default function FlightStatus() {
     source.onmessage = (e) => {
       const u = JSON.parse(e.data)
       setFlights((fs) => fs && fs.map((f) => (f.id === u.flight_id ? { ...f, status: u.status, estimated_departure: u.estimated_departure } : f)))
-      setChanged(u.flight_id)
+      setChanged({ id: u.flight_id, at: Date.now() })
     }
     return () => source.close()
   }, [])
@@ -49,7 +49,7 @@ export default function FlightStatus() {
               {dayLabel}: {flights ? <><b className="font-semibold text-ink">{flights.length}</b> chuyến · {count('DELAYED')} hoãn · {count('CANCELLED')} huỷ</> : 'đang tải…'}
             </span>
             <span className="inline-flex items-center gap-1.5 text-[13px] text-[#1f7a4c]">
-              <span className="h-2 w-2 rounded-full bg-[#2fa866]" aria-hidden="true" /> Cập nhật trực tiếp
+              <span className="relative flex h-2 w-2" aria-hidden="true"><span className="ping absolute inset-0 rounded-full bg-[#2fa866]" /><span className="relative h-2 w-2 rounded-full bg-[#2fa866]" /></span> Cập nhật trực tiếp
             </span>
           </p>
         </div>
@@ -68,10 +68,11 @@ export default function FlightStatus() {
           <span>Giờ đi</span><span>Chuyến bay</span><span>Hành trình</span><span>Dự kiến</span><span>Giờ đến</span><span>Trạng thái</span>
         </div>
         <ul>
-          {shown.map((f) => {
+          {shown.map((f, i) => {
             const tone = BOARD_TONE[f.status] ?? 'text-[#c4ccd4]'
             return (
-              <li key={f.id} className={`grid grid-cols-[72px_1fr_auto] gap-x-4 gap-y-1 border-t border-board-row px-5 py-4 transition-colors duration-700 md:grid-cols-[96px_110px_1fr_96px_96px_170px] md:items-center md:px-6 ${changed === f.id ? 'bg-[#1f2c36]' : ''}`}>
+              <li key={f.id} style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }} className={`rise relative grid grid-cols-[72px_1fr_auto] gap-x-4 gap-y-1 border-t border-board-row px-5 py-4 md:grid-cols-[96px_110px_1fr_96px_96px_170px] md:items-center md:px-6`}>
+                {changed?.id === f.id && <span key={changed.at} className="flash pointer-events-none absolute inset-0" aria-hidden="true" />}
                 <span className={`num text-[22px] font-semibold leading-none ${f.status === 'CANCELLED' ? 'text-[#8d98a3] line-through' : ''}`}>{fmtTime(f.departure_time)}</span>
                 <span className="text-[15px] font-medium tracking-wide text-[#dfe6ec]">{f.flight_number}</span>
                 <span className="col-span-3 row-start-2 text-[15px] md:col-span-1 md:row-start-auto">

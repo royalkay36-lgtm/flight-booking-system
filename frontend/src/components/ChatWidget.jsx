@@ -35,7 +35,7 @@ export default function ChatWidget() {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)} aria-label="Mở trợ lý ảo"
-        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-strong text-white shadow-lg hover:bg-brand-ink">
+        className="rise [animation-delay:800ms] fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-strong text-white shadow-lg hover:bg-brand-ink">
         <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
           <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
         </svg>
@@ -44,7 +44,7 @@ export default function ChatWidget() {
   }
 
   return (
-    <section aria-label="Trợ lý ảo" className="fixed bottom-5 right-5 z-40 flex h-[32rem] w-[22rem] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+    <section aria-label="Trợ lý ảo" className="pop-in [transform-origin:bottom_right] fixed bottom-5 right-5 z-40 flex h-[32rem] w-[22rem] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
       <header className="flex items-center bg-sky-600 px-4 py-3 text-white">
         <b className="mr-auto">Trợ lý ảo SkyBooking</b>
         <button onClick={() => setOpen(false)} aria-label="Đóng trợ lý ảo" className="grid h-8 w-8 place-items-center rounded-full hover:bg-white/15"><svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg></button>

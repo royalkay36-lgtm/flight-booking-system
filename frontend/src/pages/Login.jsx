@@ -50,7 +50,7 @@ export default function Login() {
             ))}
           </div>
 
-          <form onSubmit={submit} className="mt-6 space-y-4">
+          <form key={mode} onSubmit={submit} className="rise mt-6 space-y-4">
             {!isLogin && (
               <>
                 <label className="block"><span className="label">Họ tên</span>
@@ -94,9 +94,9 @@ export default function Login() {
 
       <figure className="relative hidden min-h-[560px] lg:block">
         <img src="/images/cua-so-may-bay.webp" alt="Dãy núi phủ tuyết nhìn qua cửa sổ máy bay giữa trời xanh"
-          className="absolute inset-0 h-full w-full object-cover" />
-        <figcaption className="absolute inset-x-0 bottom-0 bg-[rgba(16,20,24,0.55)] px-8 py-6 text-white">
-          <p className="text-xl font-semibold leading-snug">Ghế cạnh cửa sổ, chọn từ lúc đặt vé.</p>
+          className="settle absolute inset-0 h-full w-full object-cover" />
+        <figcaption className="rise absolute [animation-delay:300ms] inset-x-0 bottom-0 bg-[rgba(16,20,24,0.55)] px-8 py-6 text-white">
+          <p className="text-xl font-semibold leading-snug">Chạm để cất cánh. Ghế cạnh cửa sổ, chọn từ lúc đặt vé.</p>
           <p className="mt-1 text-[15px] text-white/85">Sơ đồ ghế theo từng loại máy bay, giữ chỗ 15 phút khi bạn thanh toán.</p>
         </figcaption>
       </figure>

@@ -40,11 +40,11 @@ export default function MyBookings() {
       )}
 
       <ul className="grid gap-4 lg:grid-cols-2">
-        {bookings.map((b) => {
+        {bookings.map((b, i) => {
           const legs = legsOf(b.route)
           const past = new Date(b.departure_time) <= now
           return (
-            <li key={b.pnr}>
+            <li key={b.pnr} className="rise" style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}>
               <Link to={`/bookings/${b.pnr}`}
                 className={`group flex overflow-hidden rounded-2xl border border-line bg-white transition-colors hover:border-brand ${past || b.status === 'CANCELLED' ? 'opacity-75' : ''}`}>
                 <div className="min-w-0 flex-1 p-5">
@@ -56,7 +56,7 @@ export default function MyBookings() {
                     <span className="text-[26px] font-bold leading-none tracking-tight">{legs[0].from}</span>
                     <span className="flex flex-1 items-center gap-1 text-brand" aria-hidden="true">
                       <span className="h-px flex-1 border-t border-dashed border-control" />
-                      <PlaneMark className="h-4 w-4" />
+                      <PlaneMark className="h-4 w-4 transition-transform duration-500 ease-out group-hover:translate-x-3" angle={90} />
                       <span className="h-px flex-1 border-t border-dashed border-control" />
                     </span>
                     <span className="text-[26px] font-bold leading-none tracking-tight">{legs[0].to}</span>
