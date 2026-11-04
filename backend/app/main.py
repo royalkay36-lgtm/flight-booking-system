@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from . import chatbot, realtime
 from .auth import SECRET_KEY
-from .db import pool
+from .db import ON_VERCEL, pool
 from .routers import admin, auth, bookings, flights, staff
 
 
@@ -18,7 +18,8 @@ async def lifespan(app: FastAPI):
     if os.environ.get("APP_ENV") == "production" and SECRET_KEY.startswith("dev-only"):
         raise RuntimeError("Chạy production phải đặt biến môi trường SECRET_KEY (khoá mặc định ai cũng biết)")
     pool.open()
-    threading.Thread(target=realtime.background_loop, args=(asyncio.get_running_loop(),), daemon=True).start()
+    if not ON_VERCEL:
+        threading.Thread(target=realtime.background_loop, args=(asyncio.get_running_loop(),), daemon=True).start()
     yield
     pool.close()
 
