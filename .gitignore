@@ -7,3 +7,4 @@ venv/
 .env
 airports.dat
 backend/outbox/
+.taste-skill/
