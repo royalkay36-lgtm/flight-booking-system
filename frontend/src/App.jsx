@@ -213,7 +213,6 @@ function Avatar({ name }) {
 }
 
 function Footer() {
-  const home = useLocation().pathname === '/'
   return (
     <footer className="mt-16 bg-brand-wash">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 pb-8 pt-12 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr]">
@@ -242,15 +241,11 @@ function Footer() {
           </ul>
         </div>
       </div>
-      {/* Tên thương hiệu cỡ lớn chỉ ở trang chủ; các trang làm việc giữ footer gọn */}
-      {home && (
-        <div className="mx-auto max-w-6xl overflow-hidden px-4 sm:px-6">
-          <p aria-hidden="true" className="reveal select-none text-[clamp(56px,13vw,176px)] font-bold leading-[0.85] tracking-[-0.04em] text-brand">SkyBooking</p>
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="flex flex-wrap justify-between gap-2 border-t border-control py-5 text-meta text-muted">
+          <p>© 2026 SkyBooking · Đề tài xây dựng hệ thống website quản lý và đặt vé máy bay</p>
+          <p>Ảnh trang đăng nhập: “View airplane window vast mountainous”, CC0, qua rawpixel · Ảnh trang chủ: Joel Peralta, CC0, qua WordPress Photo Directory</p>
         </div>
-      )}
-      <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-2 px-4 py-5 text-meta text-muted sm:px-6">
-        <p>© 2026 SkyBooking · Đề tài xây dựng hệ thống website quản lý và đặt vé máy bay</p>
-        <p>Ảnh trang đăng nhập: “View airplane window vast mountainous”, CC0, qua rawpixel · Ảnh trang chủ: Joel Peralta, CC0, qua WordPress Photo Directory</p>
       </div>
     </footer>
   )
