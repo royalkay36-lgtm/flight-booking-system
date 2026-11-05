@@ -20,7 +20,7 @@ export default function Home() {
   const [airportsError, setAirportsError] = useState(false)
   const [trip, setTrip] = useState(null)        // giá trị hiện tại của form tìm chuyến
   useEffect(() => {
-    api('/vouchers/public').then(setVouchers).catch(() => {})
+    api('/vouchers/public').then(setVouchers).catch(() => { })
     api('/airports').then(setAirports).catch(() => setAirportsError(true))
   }, [])
 
@@ -30,26 +30,37 @@ export default function Home() {
 
   return (
     <div>
-      <section className="relative isolate overflow-hidden rounded-[28px] bg-[#0b3a5c] sm:rounded-[36px]">
+      {/* ── HERO ─────────────────────────────────────────────────────────── */}
+      <section className="relative isolate overflow-hidden rounded-[28px] bg-[#0b3a5c] sm:rounded-[36px]"
+        style={{ minHeight: '70vh' }}>
         <img src="/images/canh-may-bay.jpg" alt="" fetchPriority="high" decoding="async"
           className="settle absolute inset-0 -z-10 h-full w-full object-cover object-[62%_30%]" />
-        {/* lớp phủ trung tính trên ảnh để chữ trắng đủ tương phản */}
-        <div className="absolute inset-0 -z-10 bg-[rgba(8,12,16,0.5)] md:bg-[linear-gradient(100deg,rgba(8,12,16,0.72)_0%,rgba(8,12,16,0.45)_45%,rgba(8,12,16,0)_85%)]" />
-        <div className="px-6 pb-32 pt-12 sm:px-12 sm:pb-40 sm:pt-16 lg:min-h-[540px]">
-          <h1 className="rise max-w-3xl text-[clamp(32px,5.4vw,62px)] font-bold leading-[1.08] tracking-tight text-white">
+        {/* lớp phủ tối đảm bảo chữ luôn đọc được ở mọi màn hình */}
+        <div className="absolute inset-0 -z-10 bg-[rgba(8,12,16,0.52)] md:bg-[linear-gradient(110deg,rgba(8,12,16,0.78)_0%,rgba(8,12,16,0.52)_50%,rgba(8,12,16,0.18)_100%)]" />
+
+        {/* Nội dung slogan – đặt giữa phía trên theo chiều dọc hero */}
+        <div className="flex min-h-[70vh] flex-col justify-center px-6 pb-44 pt-16 sm:px-12 sm:pb-52 sm:pt-20 lg:pb-60">
+          <h1 className="rise max-w-3xl text-[clamp(36px,5.8vw,68px)] font-bold leading-[1.06] tracking-tight text-white drop-shadow-md">
             <span className="sr-only">Cất cánh tới {destCity || 'mọi điểm đến'}</span>
             <span aria-hidden="true" className="block">Cất cánh tới</span>
-            <span className="mt-3 block min-h-[1.5em] text-[0.82em]">{destCity && <FlapText text={destCity.toLocaleUpperCase('vi')} />}</span>
+            <span className="mt-3 block min-h-[1.5em] text-[0.82em]">
+              {destCity
+                ? <FlapText text={destCity.toLocaleUpperCase('vi')} />
+                : <span className="text-[#7dd3fc]">mọi điểm đến</span>}
+            </span>
           </h1>
-          <p className="rise mt-6 max-w-lg text-lead text-white/90 [animation-delay:120ms]">
+          {/* Slogan phụ — nội dung tạm */}
+          <p className="rise mt-6 max-w-lg text-[clamp(15px,1.6vw,20px)] leading-relaxed text-white/90 drop-shadow [animation-delay:120ms]">
             <b className="font-semibold text-white">Chạm để cất cánh.</b> Tìm chuyến, chọn ghế cạnh cửa sổ và nhận vé điện tử
-            trong vài phút, bay khắp Việt Nam và châu Á.
+            trong vài phút — bay khắp Việt Nam và châu Á.
           </p>
         </div>
+
         {trip && airports.length > 0 && <TripPreview trip={trip} cityOf={cityOf} />}
       </section>
 
-      <div className="rise relative z-10 -mt-20 rounded-3xl border border-line bg-white p-5 [animation-delay:200ms] sm:mx-8 sm:-mt-28 sm:p-7">
+      {/* ── KHUNG TÌM KIẾM NỔI – đè lên mép dưới hero ──────────────────── */}
+      <div className="rise relative z-10 -mt-36 rounded-3xl border border-line bg-white p-5 shadow-2xl [animation-delay:200ms] sm:mx-8 sm:-mt-44 sm:p-7">
         <div role="group" aria-label="Chọn việc cần làm" className="segmented mb-6">
           {Object.entries(TABS).map(([k, [label, short]]) => (
             <button key={k} type="button" aria-pressed={tab === k} onClick={() => setParams(k === 'book' ? {} : { tab: k })}
@@ -199,7 +210,7 @@ function SearchForm({ airports, error, onChange }) {
         </label>
         <label className="block"><span className="label">Ngày về</span>
           <input type="date" className="input" disabled={form.trip !== 'round'} required={form.trip === 'round'}
-                 min={form.date} value={form.returnDate} onChange={set('returnDate')} />
+            min={form.date} value={form.returnDate} onChange={set('returnDate')} />
         </label>
       </div>
       <div className="flex flex-wrap items-end gap-4">
