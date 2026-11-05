@@ -39,7 +39,7 @@ export const FLIGHT_STATUS = {
   ON_TIME: ['Đúng giờ', 'bg-green-100 text-green-800'],
   DELAYED: ['Hoãn', 'bg-amber-100 text-amber-800'],
   BOARDING: ['Đang lên máy bay', 'bg-sky-100 text-sky-800'],
-  DEPARTED: ['Đã cất cánh', 'bg-indigo-100 text-indigo-800'],
+  DEPARTED: ['Đã cất cánh', 'bg-teal-100 text-teal-800'],
   ARRIVED: ['Đã hạ cánh', 'bg-slate-200 text-slate-700'],
   CANCELLED: ['Đã huỷ', 'bg-red-100 text-red-800'],
 }
@@ -55,7 +55,7 @@ export const TICKET_STATUS = {
   PENDING: ['Chờ xuất vé', 'bg-amber-100 text-amber-800'],
   ISSUED: ['Đã xuất vé', 'bg-green-100 text-green-800'],
   CHECKED_IN: ['Đã check-in', 'bg-sky-100 text-sky-800'],
-  BOARDED: ['Đã lên máy bay', 'bg-indigo-100 text-indigo-800'],
+  BOARDED: ['Đã lên máy bay', 'bg-teal-100 text-teal-800'],
   CANCELLED: ['Đã huỷ', 'bg-red-100 text-red-800'],
 }
 

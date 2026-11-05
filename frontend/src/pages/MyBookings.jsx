@@ -1,35 +1,88 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { api, BOOKING_STATUS, fmtDateTime, money } from '../api.js'
-import { Badge, ErrorText } from '../ui.jsx'
+import { api, BOOKING_STATUS, fmtDate, fmtTime, money } from '../api.js'
+import { Badge, ErrorText, PageHeader, PlaneMark } from '../ui.jsx'
+
+// route từ API có dạng "VN123 SGN→HAN, VN456 HAN→SGN"
+const legsOf = (route) => (route || '').split(', ').map((leg) => {
+  const [flight, path = ''] = leg.split(' ')
+  const [from, to] = path.split('→')
+  return { flight, from, to }
+})
 
 export default function MyBookings() {
   const [bookings, setBookings] = useState(null)
   const [error, setError] = useState('')
   useEffect(() => { api('/bookings').then(setBookings).catch((e) => setError(e.message)) }, [])
 
-  if (!bookings) return <ErrorText>{error}</ErrorText>
+  if (!bookings) {
+    return <PageHeader title="Vé của tôi">{error ? <ErrorText>{error}</ErrorText> : 'Đang tải vé của bạn…'}</PageHeader>
+  }
+
+  const now = Date.now()
+  const upcoming = bookings.filter((b) => new Date(b.departure_time) > now && b.status !== 'CANCELLED')
+  const unpaid = upcoming.filter((b) => b.status === 'PENDING').length
+
   return (
-    <div className="card overflow-x-auto">
-      <h1 className="mb-3 text-lg font-semibold">Lịch sử đặt vé</h1>
-      {!bookings.length && <p className="text-sm text-slate-500">Bạn chưa có đặt chỗ nào.</p>}
-      {bookings.length > 0 && (
-        <table className="table">
-          <thead><tr><th>PNR</th><th>Hành trình</th><th>Khởi hành</th><th>Khách</th><th>Tổng tiền</th><th>Trạng thái</th></tr></thead>
-          <tbody>
-            {bookings.map((b) => (
-              <tr key={b.pnr}>
-                <td><Link className="font-mono font-semibold text-sky-700 underline" to={`/bookings/${b.pnr}`}>{b.pnr}</Link></td>
-                <td>{b.route}</td>
-                <td>{fmtDateTime(b.departure_time)}</td>
-                <td>{b.passengers}</td>
-                <td>{money(b.total_amount)}</td>
-                <td><Badge map={BOOKING_STATUS} value={b.status} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="space-y-6">
+      <PageHeader title="Vé của tôi">
+        {bookings.length
+          ? <>{upcoming.length} chuyến sắp bay{unpaid > 0 && <> · <b className="font-semibold text-[#9a5b00]">{unpaid} chưa thanh toán</b></>} · {bookings.length} đặt chỗ tất cả</>
+          : 'Bạn chưa có đặt chỗ nào.'}
+      </PageHeader>
+
+      {!bookings.length && (
+        <div className="card flex flex-wrap items-center gap-4 bg-brand-wash">
+          <p className="mr-auto">Tìm chuyến bay, chọn ghế và thanh toán; vé sẽ hiện ở đây.</p>
+          <Link to="/" className="btn">Tìm chuyến bay</Link>
+        </div>
       )}
+
+      <ul className="grid gap-4 lg:grid-cols-2">
+        {bookings.map((b, i) => {
+          const legs = legsOf(b.route)
+          const past = new Date(b.departure_time) <= now
+          return (
+            <li key={b.pnr} className="rise" style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}>
+              <Link to={`/bookings/${b.pnr}`}
+                className={`group flex overflow-hidden rounded-2xl border border-line bg-white transition-colors hover:border-brand ${past || b.status === 'CANCELLED' ? 'opacity-75' : ''}`}>
+                <div className="min-w-0 flex-1 p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-meta text-muted">{fmtDate(b.departure_time)} · {fmtTime(b.departure_time)}</span>
+                    <Badge map={BOOKING_STATUS} value={b.status} />
+                  </div>
+                  <div className="mt-3 flex items-center gap-3">
+                    <span className="text-title font-bold leading-none tracking-tight">{legs[0].from}</span>
+                    <span className="flex flex-1 items-center gap-1 text-brand" aria-hidden="true">
+                      <span className="h-px flex-1 border-t border-dashed border-control" />
+                      <PlaneMark className="h-4 w-4 transition-transform duration-500 ease-out group-hover:translate-x-3" angle={90} />
+                      <span className="h-px flex-1 border-t border-dashed border-control" />
+                    </span>
+                    <span className="text-title font-bold leading-none tracking-tight">{legs[0].to}</span>
+                  </div>
+                  <p className="mt-2 text-meta text-muted">
+                    {legs.map((l) => l.flight).join(' · ')}
+                    {legs.length > 1 && <> · {legs.at(-1).to === legs[0].from ? "chiều về" : "chặng tiếp"} {legs.slice(1).map((l) => `${l.from}→${l.to}`).join(", ")}</>}
+                  </p>
+                </div>
+                {/* Cuống vé: răng cưa bằng hai nửa hình tròn màu nền */}
+                <div className="relative flex w-32 flex-none flex-col justify-between border-l border-dashed border-control bg-brand-wash p-4 sm:w-36">
+                  <span className="absolute -left-2 -top-2 h-4 w-4 rounded-full border border-line bg-ground" aria-hidden="true" />
+                  <span className="absolute -bottom-2 -left-2 h-4 w-4 rounded-full border border-line bg-ground" aria-hidden="true" />
+                  <div>
+                    <span className="block text-meta text-muted">Mã đặt chỗ</span>
+                    <span className="text-lead font-bold tracking-[0.12em] text-brand-ink">{b.pnr}</span>
+                  </div>
+                  <div className="mt-3">
+                    <span className="block text-meta text-muted">{b.passengers} khách</span>
+                    <span className="num text-ui font-semibold">{money(b.total_amount)}</span>
+                  </div>
+                </div>
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
