@@ -85,7 +85,8 @@ export function createSeatMapGestures(getView, applyView) {
       onPointerCancel: event => endPointer(event, true),
       onLostPointerCapture: event => { if (pointers.has(event.pointerId)) endPointer(event, true) },
       onClickCapture: event => {
-        if (suppressClick && event.detail !== 0) { event.preventDefault(); event.stopPropagation() }
+        const pointer = event.pointerType || event.nativeEvent?.pointerType
+        if (suppressClick && (event.detail !== 0 || pointer)) { event.preventDefault(); event.stopPropagation() }
       },
     },
     reset: () => { pointers.clear(); gesture = null; suppressClick = false },

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import { api, fmtDate, fmtTime, isoDate, money } from '../api.js'
 
 const WELCOME = {
@@ -10,6 +10,8 @@ const WELCOME = {
 }
 
 export default function ChatWidget() {
+  const { pathname } = useLocation()
+  const panelPosition = pathname === '/booking' ? 'bottom-[calc(6rem+env(safe-area-inset-bottom))] max-h-[calc(100dvh-8rem-env(safe-area-inset-bottom))] lg:bottom-5' : 'bottom-5'
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([WELCOME])
   const [input, setInput] = useState('')
@@ -50,7 +52,7 @@ export default function ChatWidget() {
   }
 
   return (
-    <section aria-label="Trợ lý ảo" className="pop-in [transform-origin:bottom_right] fixed bottom-5 right-5 z-40 flex h-[32rem] w-[22rem] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+    <section aria-label="Trợ lý ảo" className={`pop-in [transform-origin:bottom_right] fixed ${panelPosition} right-5 z-40 flex h-[32rem] w-[22rem] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl`}>
       <header className="flex items-center bg-sky-600 px-4 py-3 text-white">
         <b className="mr-auto">Trợ lý ảo SkyBooking</b>
         <button onClick={() => setOpen(false)} aria-label="Đóng trợ lý ảo" className="grid h-8 w-8 place-items-center rounded-full hover:bg-white/15"><svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg></button>
