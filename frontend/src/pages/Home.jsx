@@ -1,7 +1,52 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { api, fmtDate, isoDate } from '../api.js'
 import { ErrorText, FlapText, PlaneMark } from '../ui.jsx'
+
+// Dữ liệu sân bay mặc định (dữ liệu tạm khi máy chủ chưa phản hồi)
+const DEFAULT_AIRPORTS = [
+  { iata_code: 'HAN', name: 'Noi Bai International Airport', city: 'Hà Nội', country: 'Việt Nam' },
+  { iata_code: 'SGN', name: 'Tan Son Nhat International Airport', city: 'TP. Hồ Chí Minh', country: 'Việt Nam' },
+  { iata_code: 'DAD', name: 'Da Nang International Airport', city: 'Đà Nẵng', country: 'Việt Nam' },
+  { iata_code: 'CXR', name: 'Cam Ranh International Airport', city: 'Nha Trang', country: 'Việt Nam' },
+  { iata_code: 'PQC', name: 'Phu Quoc International Airport', city: 'Phú Quốc', country: 'Việt Nam' },
+  { iata_code: 'HPH', name: 'Cat Bi International Airport', city: 'Hải Phòng', country: 'Việt Nam' },
+  { iata_code: 'VII', name: 'Vinh International Airport', city: 'Vinh', country: 'Việt Nam' },
+  { iata_code: 'HUI', name: 'Phu Bai International Airport', city: 'Huế', country: 'Việt Nam' },
+  { iata_code: 'DLI', name: 'Lien Khuong Airport', city: 'Đà Lạt', country: 'Việt Nam' },
+  { iata_code: 'VCA', name: 'Can Tho International Airport', city: 'Cần Thơ', country: 'Việt Nam' },
+  { iata_code: 'BKK', name: 'Suvarnabhumi Airport', city: 'Bangkok', country: 'Thái Lan' },
+  { iata_code: 'SIN', name: 'Singapore Changi Airport', city: 'Singapore', country: 'Singapore' },
+  { iata_code: 'ICN', name: 'Incheon International Airport', city: 'Seoul', country: 'Hàn Quốc' },
+  { iata_code: 'NRT', name: 'Narita International Airport', city: 'Tokyo', country: 'Nhật Bản' },
+]
+
+// Hàm loại bỏ dấu tiếng Việt để tìm kiếm không phân biệt hoa/thường và dấu
+function removeVietnameseTones(str) {
+  if (!str) return ''
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim()
+}
+
+function getSearchableAirportText(a) {
+  let extra = ''
+  if (a.iata_code === 'SGN') extra = ' sài gòn sai gon hcm tphcm'
+  if (a.iata_code === 'HAN') extra = ' thủ đô thu do'
+  return removeVietnameseTones(`${a.city} ${a.name} ${a.iata_code} ${a.country ?? ''}${extra}`)
+}
+
+function formatPassengerSummary(adults, children, infants) {
+  const parts = []
+  if (adults > 0) parts.push(`${adults} người lớn`)
+  if (children > 0) parts.push(`${children} trẻ em`)
+  if (infants > 0) parts.push(`${infants} em bé`)
+  return parts.join(', ') || '1 người lớn'
+}
 
 // [nhãn đầy đủ, nhãn ngắn trên điện thoại]
 const TABS = { book: ['Mua vé', 'Mua vé'], manage: ['Quản lý đặt chỗ', 'Quản lý vé'], checkin: ['Làm thủ tục', 'Thủ tục'] }
@@ -24,9 +69,10 @@ export default function Home() {
     api('/airports').then(setAirports).catch(() => setAirportsError(true))
   }, [])
 
-  const cityOf = (code) => airports.find((a) => a.iata_code === code)?.city ?? code
+  const airportList = airports.length > 0 ? airports : DEFAULT_AIRPORTS
+  const cityOf = (code) => airportList.find((a) => a.iata_code === code)?.city ?? code
   // Tiêu đề hiện ngay điểm đến đang chọn; chỉ lật chữ khi người dùng đổi điểm đến
-  const destCity = trip && airports.length ? cityOf(trip.destination) : ''
+  const destCity = trip && airportList.length ? cityOf(trip.destination) : ''
 
   return (
     <div>
@@ -56,7 +102,7 @@ export default function Home() {
           </p>
         </div>
 
-        {trip && airports.length > 0 && <TripPreview trip={trip} cityOf={cityOf} />}
+        {trip && airportList.length > 0 && <TripPreview trip={trip} cityOf={cityOf} />}
       </section>
 
       {/* ── KHUNG TÌM KIẾM NỔI – đè lên mép dưới hero ──────────────────── */}
@@ -70,7 +116,7 @@ export default function Home() {
           ))}
         </div>
         {/* SearchForm luôn được giữ (chỉ ẩn) để không mất lựa chọn khi đổi tab */}
-        <div hidden={tab !== 'book'}><SearchForm airports={airports} error={airportsError} onChange={setTrip} /></div>
+        <div hidden={tab !== 'book'}><SearchForm airports={airportList} error={airportsError} onChange={setTrip} /></div>
         {tab !== 'book' && <LookupForm key={tab} checkin={tab === 'checkin'} />}
       </div>
 
@@ -158,42 +204,374 @@ function TripPreview({ trip, cityOf }) {
   )
 }
 
+function AirportPicker({ label, value, onChange, otherValue, airports }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [inputText, setInputText] = useState('')
+  const [highlightedIndex, setHighlightedIndex] = useState(-1)
+  const containerRef = useRef(null)
+  const listRef = useRef(null)
+
+  // Cập nhật text hiển thị khi value thay đổi (ví dụ khi đảo điểm đi/đến)
+  useEffect(() => {
+    const current = airports.find((a) => a.iata_code === value)
+    setInputText(current ? `${current.city} (${current.iata_code})` : (value || ''))
+  }, [value, airports])
+
+  // Lọc sân bay theo tên, thành phố, mã IATA, bỏ dấu tiếng Việt và loại trừ sân bay ở ô còn lại
+  const available = airports.filter((a) => a.iata_code !== otherValue)
+  const q = removeVietnameseTones(query)
+  const filtered = q
+    ? available.filter((a) => getSearchableAirportText(a).includes(q))
+    : available
+
+  // Tự động cuộn đến item được highlight khi dùng phím mũi tên
+  useEffect(() => {
+    if (highlightedIndex >= 0 && listRef.current) {
+      const item = listRef.current.children[highlightedIndex]
+      item?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [highlightedIndex])
+
+  // Đóng khi click ra ngoài hoặc nhấn Esc
+  useEffect(() => {
+    if (!isOpen) return
+    const handlePointerDown = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        closeDropdown()
+      }
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        closeDropdown()
+      }
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('touchstart', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('touchstart', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, value, airports, query])
+
+  const closeDropdown = () => {
+    setIsOpen(false)
+    setHighlightedIndex(-1)
+    const exactMatch = available.find(
+      (a) =>
+        a.iata_code.toLowerCase() === query.trim().toLowerCase() ||
+        removeVietnameseTones(a.city) === removeVietnameseTones(query)
+    )
+    if (exactMatch) {
+      handleSelect(exactMatch.iata_code)
+      return
+    }
+    const current = airports.find((a) => a.iata_code === value)
+    setInputText(current ? `${current.city} (${current.iata_code})` : (value || ''))
+    setQuery('')
+  }
+
+  const handleSelect = (code) => {
+    onChange(code)
+    const selected = airports.find((a) => a.iata_code === code)
+    setInputText(selected ? `${selected.city} (${selected.iata_code})` : code)
+    setQuery('')
+    setIsOpen(false)
+    setHighlightedIndex(-1)
+  }
+
+  const handleKeyDown = (e) => {
+    if (!isOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        setIsOpen(true)
+        setHighlightedIndex(0)
+      }
+      return
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlightedIndex((prev) => (filtered.length ? (prev + 1) % filtered.length : -1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlightedIndex((prev) => (filtered.length ? (prev - 1 + filtered.length) % filtered.length : -1))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (highlightedIndex >= 0 && highlightedIndex < filtered.length) {
+        handleSelect(filtered[highlightedIndex].iata_code)
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      closeDropdown()
+    }
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <label className="block">
+        <span className="label">{label}</span>
+        <div className="relative">
+          <input
+            type="text"
+            className="input pr-8"
+            placeholder="Tìm sân bay, thành phố..."
+            value={inputText}
+            onFocus={(e) => {
+              setIsOpen(true)
+              e.target.select()
+            }}
+            onChange={(e) => {
+              setInputText(e.target.value)
+              setQuery(e.target.value)
+              setIsOpen(true)
+              setHighlightedIndex(0)
+            }}
+            onKeyDown={handleKeyDown}
+            aria-haspopup="listbox"
+            aria-expanded={isOpen}
+            autoComplete="off"
+          />
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted text-xs">
+            ▼
+          </span>
+        </div>
+      </label>
+
+      {isOpen && (
+        <ul
+          ref={listRef}
+          role="listbox"
+          className="absolute left-0 right-0 top-full z-40 mt-1.5 max-h-64 overflow-y-auto rounded-2xl border border-line bg-white py-1.5 shadow-xl"
+        >
+          {filtered.length === 0 ? (
+            <li className="px-4 py-3 text-center text-meta text-muted">
+              Không tìm thấy sân bay
+            </li>
+          ) : (
+            filtered.map((a, index) => (
+              <li
+                key={a.iata_code}
+                role="option"
+                aria-selected={highlightedIndex === index}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  handleSelect(a.iata_code)
+                }}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                className={`flex cursor-pointer items-center justify-between gap-3 px-3.5 py-2.5 transition-colors ${
+                  highlightedIndex === index ? 'bg-brand-wash text-brand-ink' : 'hover:bg-ground'
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-ink">{a.city}</span>
+                    {a.country && <span className="text-meta text-muted">· {a.country}</span>}
+                  </div>
+                  <div className="text-meta text-muted truncate">{a.name}</div>
+                </div>
+                <span className="flex-none rounded-lg bg-ground px-2 py-0.5 font-mono text-xs font-bold text-brand-strong">
+                  {a.iata_code}
+                </span>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function PassengerPicker({ adults, children, infants, onChange }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef(null)
+
+  const total = adults + children + infants
+  const maxTotal = 9
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handlePointerDown = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false)
+      }
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('touchstart', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('touchstart', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+
+  const updateCount = (key, delta) => {
+    let newAdults = adults
+    let newChildren = children
+    let newInfants = infants
+
+    if (key === 'adults') newAdults += delta
+    if (key === 'children') newChildren += delta
+    if (key === 'infants') newInfants += delta
+
+    if (newAdults < 1) return
+    if (newChildren < 0) return
+    if (newInfants < 0) return
+    if (newInfants > newAdults) return
+    if (newAdults + newChildren + newInfants > maxTotal) return
+
+    onChange({ adults: newAdults, children: newChildren, infants: newInfants })
+  }
+
+  const summary = formatPassengerSummary(adults, children, infants)
+
+  const rows = [
+    {
+      key: 'adults',
+      title: 'Người lớn',
+      subtitle: 'Từ 12 tuổi trở lên',
+      count: adults,
+      minusDisabled: adults <= 1 || adults <= infants,
+      plusDisabled: total >= maxTotal,
+    },
+    {
+      key: 'children',
+      title: 'Trẻ em',
+      subtitle: 'Từ 2 – 11 tuổi',
+      count: children,
+      minusDisabled: children <= 0,
+      plusDisabled: total >= maxTotal,
+    },
+    {
+      key: 'infants',
+      title: 'Em bé',
+      subtitle: 'Dưới 2 tuổi (ngồi chung)',
+      count: infants,
+      minusDisabled: infants <= 0,
+      plusDisabled: infants >= adults || total >= maxTotal,
+    },
+  ]
+
+  return (
+    <div ref={containerRef} className="relative">
+      <span className="label">Số khách</span>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
+        className="input flex items-center justify-between text-left cursor-pointer"
+      >
+        <span className="truncate">{summary}</span>
+        <span
+          className="ml-2 text-muted text-xs transition-transform duration-200"
+          style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}
+        >
+          ▼
+        </span>
+      </button>
+
+      {isOpen && (
+        <div
+          role="dialog"
+          aria-label="Chọn số hành khách"
+          className="absolute left-0 top-full z-40 mt-1.5 w-full sm:w-80 rounded-2xl border border-line bg-white p-4 shadow-xl"
+        >
+          <div className="space-y-3.5">
+            {rows.map((r) => (
+              <div key={r.key} className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold text-ink text-ui">{r.title}</div>
+                  <div className="text-meta text-muted">{r.subtitle}</div>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    aria-label={`Giảm ${r.title}`}
+                    disabled={r.minusDisabled}
+                    onClick={() => updateCount(r.key, -1)}
+                    className="grid h-8 w-8 place-items-center rounded-full border border-control text-ink transition-colors hover:border-brand hover:bg-brand-wash disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-control disabled:hover:bg-transparent cursor-pointer"
+                  >
+                    −
+                  </button>
+                  <span className="w-5 text-center font-bold text-ink num">{r.count}</span>
+                  <button
+                    type="button"
+                    aria-label={`Tăng ${r.title}`}
+                    disabled={r.plusDisabled}
+                    onClick={() => updateCount(r.key, 1)}
+                    className="grid h-8 w-8 place-items-center rounded-full border border-control text-ink transition-colors hover:border-brand hover:bg-brand-wash disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-control disabled:hover:bg-transparent cursor-pointer"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 border-t border-rule pt-2.5 text-meta text-muted">
+            Tối đa 9 khách. Em bé không vượt quá số người lớn.
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className="btn mt-3 h-9 w-full text-sm font-semibold"
+          >
+            Xong
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SearchForm({ airports, error, onChange }) {
   const navigate = useNavigate()
   const [form, setForm] = useState({
-    trip: 'oneway', origin: 'HAN', destination: 'SGN',
-    date: isoDate(new Date(Date.now() + 864e5)), returnDate: '', adults: 1, children: 0, infants: 0,
+    trip: 'oneway',
+    origin: 'HAN',
+    destination: 'SGN',
+    date: isoDate(new Date(Date.now() + 864e5)),
+    returnDate: '',
+    adults: 1,
+    children: 0,
+    infants: 0,
   })
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+
+  const set = (k) => (e) => setForm((prev) => ({ ...prev, [k]: e.target.value }))
   useEffect(() => { onChange?.(form) }, [form])
-  const sameAirport = form.origin === form.destination
-  const tooMany = Number(form.adults) + Number(form.children) > 9
+
+  const swapAirports = () => {
+    setForm((prev) => ({
+      ...prev,
+      origin: prev.destination,
+      destination: prev.origin,
+    }))
+  }
+
+  const sameAirport = Boolean(form.origin && form.destination && form.origin === form.destination)
+  const totalGuests = Number(form.adults) + Number(form.children) + Number(form.infants)
+  const tooMany = totalGuests > 9
 
   const submit = (e) => {
     e.preventDefault()
+    if (sameAirport || tooMany) return
     const { trip, returnDate, ...q } = form
     navigate('/search?' + new URLSearchParams(trip === 'round' ? { ...q, returnDate } : q))
   }
 
-  const airportSelect = (k, label) => (
-    <label className="block">
-      <span className="label">{label}</span>
-      <select className="input" value={form[k]} onChange={set(k)}>
-        {airports.map((a) => <option key={a.iata_code} value={a.iata_code}>{a.city} ({a.iata_code})</option>)}
-      </select>
-    </label>
-  )
-  const counter = (k, label, min, max) => (
-    <label className="block"><span className="label">{label}</span>
-      <select className="input" value={form[k]} onChange={set(k)}>
-        {Array.from({ length: max - min + 1 }, (_, i) => <option key={i}>{min + i}</option>)}
-      </select>
-    </label>
-  )
-
   return (
     <form onSubmit={submit} className="space-y-5">
-      {error && <ErrorText>Không tải được danh sách sân bay. Kiểm tra kết nối rồi tải lại trang.</ErrorText>}
+      {error && <ErrorText>Không tải được danh sách sân bay từ máy chủ. Đang dùng dữ liệu sân bay có sẵn.</ErrorText>}
       <fieldset className="segmented">
         <legend className="sr-only">Loại vé</legend>
         {[['oneway', 'Một chiều'], ['round', 'Khứ hồi']].map(([v, label]) => (
@@ -202,30 +580,95 @@ function SearchForm({ airports, error, onChange }) {
           </label>
         ))}
       </fieldset>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {airportSelect('origin', 'Điểm đi')}
-        {airportSelect('destination', 'Điểm đến')}
-        <label className="block"><span className="label">Ngày đi</span>
-          <input type="date" className="input" required min={isoDate()} value={form.date} onChange={set('date')} />
-        </label>
-        <label className="block"><span className="label">Ngày về</span>
-          <input type="date" className="input" disabled={form.trip !== 'round'} required={form.trip === 'round'}
-            min={form.date} value={form.returnDate} onChange={set('returnDate')} />
-        </label>
-      </div>
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="grid flex-1 grid-cols-3 gap-3 sm:max-w-md">
-          {counter('adults', 'Người lớn', 1, 9)}
-          {counter('children', 'Trẻ em 2–11', 0, 8)}
-          {counter('infants', 'Em bé <2', 0, Number(form.adults))}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Cụm Điểm đi - Đảo - Điểm đến */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+          <AirportPicker
+            label="Điểm đi"
+            value={form.origin}
+            onChange={(code) => setForm((prev) => ({ ...prev, origin: code }))}
+            otherValue={form.destination}
+            airports={airports}
+          />
+
+          <div className="flex items-center justify-center sm:pb-0.5">
+            <button
+              type="button"
+              onClick={swapAirports}
+              aria-label="Đổi điểm đi và điểm đến"
+              title="Đổi điểm đi và điểm đến"
+              className="grid h-10 w-10 place-items-center rounded-full border border-control bg-white text-muted shadow-sm transition-all hover:border-brand hover:bg-brand-wash hover:text-brand active:scale-95 cursor-pointer"
+            >
+              <span className="text-base leading-none select-none sm:hidden" aria-hidden="true">⇅</span>
+              <span className="hidden text-base leading-none select-none sm:inline" aria-hidden="true">⇄</span>
+            </button>
+          </div>
+
+          <AirportPicker
+            label="Điểm đến"
+            value={form.destination}
+            onChange={(code) => setForm((prev) => ({ ...prev, destination: code }))}
+            otherValue={form.origin}
+            airports={airports}
+          />
         </div>
-        <button className="btn group h-12 w-full px-7 sm:ml-auto sm:w-auto" disabled={sameAirport || tooMany}>
+
+        {/* Cụm Ngày đi và Ngày về */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="label">Ngày đi</span>
+            <input
+              type="date"
+              className="input"
+              required
+              min={isoDate()}
+              value={form.date}
+              onChange={set('date')}
+            />
+          </label>
+          <label className="block">
+            <span className="label">Ngày về</span>
+            <input
+              type="date"
+              className="input"
+              disabled={form.trip !== 'round'}
+              required={form.trip === 'round'}
+              min={form.date}
+              value={form.returnDate}
+              onChange={set('returnDate')}
+            />
+          </label>
+        </div>
+      </div>
+
+      {/* Row 2: Số khách và Nút tìm kiếm */}
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="w-full sm:w-72">
+          <PassengerPicker
+            adults={Number(form.adults)}
+            children={Number(form.children)}
+            infants={Number(form.infants)}
+            onChange={(counts) => setForm((prev) => ({ ...prev, ...counts }))}
+          />
+        </div>
+
+        <button
+          type="submit"
+          className="btn group h-12 w-full px-7 sm:ml-auto sm:w-auto"
+          disabled={sameAirport || tooMany}
+        >
           Tìm chuyến bay
           <PlaneMark className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1 group-hover:-translate-y-0.5" />
         </button>
       </div>
+
       {(sameAirport || tooMany) && (
-        <p className="text-[#9a5b00]">{sameAirport ? 'Điểm đi và điểm đến phải khác nhau.' : 'Tối đa 9 khách (người lớn và trẻ em) mỗi lần đặt.'}</p>
+        <p className="text-[#9a5b00] text-sm">
+          {sameAirport
+            ? 'Điểm đi và điểm đến không được trùng nhau.'
+            : 'Tối đa 9 khách mỗi lần đặt.'}
+        </p>
       )}
     </form>
   )
