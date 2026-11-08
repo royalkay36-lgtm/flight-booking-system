@@ -57,6 +57,23 @@ const STEPS = [
   ['Nhận vé, làm thủ tục', 'Vé điện tử gửi qua email, làm thủ tục trực tuyến và nhận thẻ lên máy bay có mã QR.'],
 ]
 
+// Icon SVG viết tay (dự án chưa có thư viện icon), nét theo currentColor
+const svgProps = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }
+const ICONS = {
+  tag: <svg {...svgProps}><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="8" cy="8" r="1.5" /></svg>,
+  bolt: <svg {...svgProps}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" /></svg>,
+  headset: <svg {...svgProps}><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><rect x="3" y="14" width="4" height="6" rx="1.5" /><rect x="17" y="14" width="4" height="6" rx="1.5" /><path d="M19 20a3 3 0 0 1-3 2h-3" /></svg>,
+  shield: <svg {...svgProps}><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z" /><path d="m8.5 12 2.5 2.5 4.5-5" /></svg>,
+}
+
+// NỘI DUNG TẠM: chỉnh lại câu chữ cho đúng dịch vụ thực tế. Chưa đưa số liệu cụ thể nào.
+const REASONS = [
+  ['tag', 'Giá minh bạch', 'Giá hiển thị đã gồm thuế và phí, không phát sinh phí ẩn khi thanh toán.'],
+  ['bolt', 'Đặt vé nhanh', 'Tìm chuyến, chọn ghế và thanh toán ngay trên một trang, không cần ra quầy.'],
+  ['headset', 'Hỗ trợ 24/7', 'Đội ngũ chăm sóc khách hàng và trợ lý ảo luôn sẵn sàng giải đáp mọi lúc.'],
+  ['shield', 'Thanh toán an toàn', 'Thanh toán qua cổng thanh toán uy tín, thông tin của bạn được bảo mật.'],
+]
+
 export default function Home() {
   const [params, setParams] = useSearchParams()
   const tab = TABS[params.get('tab')] ? params.get('tab') : 'book'
@@ -123,6 +140,23 @@ export default function Home() {
         <div hidden={tab !== 'book'}><SearchForm airports={airportList} error={airportsError} onChange={setTrip} /></div>
         {tab !== 'book' && <LookupForm key={tab} checkin={tab === 'checkin'} />}
       </div>
+
+      {/* 2. Vì sao chọn SkyBooking */}
+      <section className="mt-24" aria-labelledby="why-title">
+        <h2 id="why-title" className="reveal text-title font-bold tracking-tight">Vì sao chọn SkyBooking</h2>
+        <p className="reveal mt-1 text-muted">Đặt vé máy bay đơn giản, rõ ràng và yên tâm từ đầu đến cuối.</p>
+        <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {REASONS.map(([icon, title, text]) => (
+            <li key={title} className="reveal card">
+              <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand-tint text-brand-strong [&>svg]:h-6 [&>svg]:w-6">
+                {ICONS[icon]}
+              </span>
+              <h3 className="mt-4 text-lead font-semibold">{title}</h3>
+              <p className="mt-1 text-muted">{text}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section className="mt-24" aria-labelledby="steps-title">
         <h2 id="steps-title" className="reveal text-title font-bold tracking-tight">Từ lúc chọn chuyến đến lúc lên máy bay</h2>
