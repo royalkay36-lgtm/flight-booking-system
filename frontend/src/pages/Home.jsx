@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { api, fmtDate, isoDate } from '../api.js'
 import { ErrorText, FlapText, PlaneMark } from '../ui.jsx'
 import DestinationCards from '../components/DestinationCards.jsx'
+import TripDatePicker from '../components/TripDatePicker.jsx'
 
 // Dữ liệu sân bay mặc định (dữ liệu tạm khi máy chủ chưa phản hồi)
 const DEFAULT_AIRPORTS = [
@@ -677,10 +678,11 @@ function SearchForm({ airports, error, onChange }) {
   const sameAirport = Boolean(form.origin && form.destination && form.origin === form.destination)
   const totalGuests = Number(form.adults) + Number(form.children) + Number(form.infants)
   const tooMany = totalGuests > 9
+  const missingReturn = form.trip === 'round' && !form.returnDate
 
   const submit = (e) => {
     e.preventDefault()
-    if (sameAirport || tooMany) return
+    if (sameAirport || tooMany || missingReturn) return
     const { trip, returnDate, ...q } = form
     navigate('/search?' + new URLSearchParams(trip === 'round' ? { ...q, returnDate } : q))
   }
@@ -730,32 +732,16 @@ function SearchForm({ airports, error, onChange }) {
           />
         </div>
 
-        {/* Cụm Ngày đi và Ngày về */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="label">Ngày đi</span>
-            <input
-              type="date"
-              className="input"
-              required
-              min={isoDate()}
-              value={form.date}
-              onChange={set('date')}
-            />
-          </label>
-          <label className="block">
-            <span className="label">Ngày về</span>
-            <input
-              type="date"
-              className="input"
-              disabled={form.trip !== 'round'}
-              required={form.trip === 'round'}
-              min={form.date}
-              value={form.returnDate}
-              onChange={set('returnDate')}
-            />
-          </label>
-        </div>
+        {/* Cụm Ngày đi và Ngày về: một lịch chung, có giá rẻ nhất mỗi ngày */}
+        <TripDatePicker
+          trip={form.trip}
+          date={form.date}
+          returnDate={form.returnDate}
+          origin={form.origin}
+          destination={form.destination}
+          passengers={Number(form.adults) + Number(form.children)}
+          onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+        />
       </div>
 
       {/* Row 2: Số khách và Nút tìm kiếm */}
@@ -772,18 +758,18 @@ function SearchForm({ airports, error, onChange }) {
         <button
           type="submit"
           className="btn group h-12 w-full px-7 sm:ml-auto sm:w-auto"
-          disabled={sameAirport || tooMany}
+          disabled={sameAirport || tooMany || missingReturn}
         >
           Tìm chuyến bay
           <PlaneMark className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1 group-hover:-translate-y-0.5" />
         </button>
       </div>
 
-      {(sameAirport || tooMany) && (
+      {(sameAirport || tooMany || missingReturn) && (
         <p className="text-[#9a5b00] text-sm">
           {sameAirport
             ? 'Điểm đi và điểm đến không được trùng nhau.'
-            : 'Tối đa 9 khách mỗi lần đặt.'}
+            : tooMany ? 'Tối đa 9 khách mỗi lần đặt.' : 'Chọn ngày về cho vé khứ hồi.'}
         </p>
       )}
     </form>
