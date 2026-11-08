@@ -139,15 +139,16 @@ def booking_detail(pnr: str, last_name: str | None = None, user=Depends(optional
     booking = {k: b[k] for k in ("id", "pnr", "user_id", "status", "total_amount", "discount_amount", "voucher_code",
                                  "contact_email", "contact_phone", "created_at", "expires_at")}
     booking["tickets"] = db.execute("""
-        SELECT t.id, t.ticket_number, t.status, t.price, t.seat_fee, t.fare_class, fc.name AS fare_name,
+        SELECT t.id, t.ticket_number, t.status, t.price, t.seat_fee, t.fare_class, fc.name AS fare_name, fc.cabin_class,
                fc.checked_baggage_kg, fc.carry_on_kg, fc.change_fee, fc.refund_fee, t.checked_in_at, t.boarded_at,
                p.id AS passenger_id, p.full_name, p.passenger_type, s.seat_code,
-               f.id AS flight_id, f.flight_number, f.origin, f.destination, o.city AS origin_city,
+               f.id AS flight_id, f.flight_number, al.name AS airline_name, f.origin, f.destination, o.city AS origin_city,
                d.city AS destination_city, f.departure_time, f.arrival_time, f.estimated_departure,
                f.status AS flight_status
         FROM tickets t
         JOIN passengers p    ON p.id = t.passenger_id
         JOIN flights f       ON f.id = t.flight_id
+        JOIN airlines al     ON al.iata_code = f.airline_code
         JOIN airports o      ON o.iata_code = f.origin
         JOIN airports d      ON d.iata_code = f.destination
         JOIN fare_classes fc ON fc.code = t.fare_class

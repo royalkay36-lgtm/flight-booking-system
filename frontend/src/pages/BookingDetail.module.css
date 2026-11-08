@@ -1,0 +1,206 @@
+.page {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+.page :is(button, a, input):focus-visible {
+  outline: 3px solid var(--color-brand);
+  outline-offset: 3px;
+}
+.page :is(.button, button) {
+  min-height: 44px;
+  height: auto;
+  white-space: normal;
+  padding-top: 0.65rem;
+  padding-bottom: 0.65rem;
+}
+.page :is(p, dd, li, h2, h3) {
+  overflow-wrap: anywhere;
+}
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: center;
+}
+.amount {
+  margin-left: auto;
+}
+.timeline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  padding: 0;
+  margin: 1.25rem 0 0;
+}
+.step {
+  position: relative;
+  padding: 0 0.65rem 0 0;
+  min-width: 0;
+}
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 1.2rem;
+  left: 3rem;
+  right: 0.65rem;
+  height: 2px;
+  background: var(--color-control);
+}
+.step[data-state='done']::after {
+  background: var(--color-brand);
+}
+.marker {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--color-control);
+  border-radius: 50%;
+  background: var(--color-ground);
+  font-weight: 700;
+  margin-bottom: 0.65rem;
+}
+.step[data-state='done'] .marker {
+  color: white;
+  border-color: var(--color-brand-strong);
+  background: var(--color-brand-strong);
+}
+.step[data-state='current'] .marker {
+  border-color: var(--color-brand);
+  color: var(--color-brand-ink);
+  background: var(--color-brand-tint);
+}
+.step[data-state='stopped'] .marker {
+  border-style: dashed;
+  color: var(--color-muted);
+}
+.route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1.25rem 0;
+  align-items: center;
+}
+.endpoint {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.endpoint:last-child {
+  text-align: right;
+}
+.connector {
+  color: var(--color-brand-ink);
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+}
+.passengers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 0.75rem;
+}
+.passenger {
+  border: 1px solid var(--color-line);
+  border-radius: 1rem;
+  padding: 1rem;
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  min-width: 0;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+.facts dt {
+  font-size: var(--text-meta);
+  color: var(--color-muted);
+}
+.facts dd {
+  margin: 0;
+}
+.actions {
+  align-items: start;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+.action {
+  min-width: 0;
+  background: var(--color-ground);
+  border: 1px solid var(--color-line);
+  border-radius: 1rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.action h3 {
+  font-weight: 700;
+}
+.action p {
+  font-size: var(--text-meta);
+  color: var(--color-muted);
+}
+.action button {
+  margin-top: auto;
+}
+.dialog {
+  border: 1px solid var(--color-line);
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  width: min(34rem, calc(100% - 2rem));
+  max-height: 90dvh;
+  overflow: auto;
+  color: var(--color-ink);
+  background: white;
+}
+.dialog::backdrop {
+  background: rgb(15 23 32 / 0.55);
+}
+.dialogFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+.change {
+  padding: 1rem;
+  border: 1px solid var(--color-brand);
+  border-radius: 1rem;
+  background: var(--color-brand-wash);
+  display: grid;
+  gap: 1rem;
+}
+@media (max-width: 640px) {
+  .actions {
+    grid-template-columns: 1fr;
+  }
+  .route {
+    gap: 0.5rem;
+  }
+  .connector {
+    font-size: var(--text-meta);
+  }
+  .header > * {
+    min-width: 0;
+  }
+  .amount {
+    margin-left: 0;
+    width: 100%;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-line);
+  }
+  .page :global(.card) {
+    padding: 1rem;
+  }
+  .step {
+    font-size: var(--text-meta);
+  }
+}
