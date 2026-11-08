@@ -14,7 +14,7 @@ import {
   PAX,
   TICKET_STATUS,
 } from '../api.js'
-import { Badge, ErrorText, PageHeader, PlaneMark, useAuth } from '../ui.jsx'
+import { Badge, ErrorText, openChat, PageHeader, PlaneMark, useAuth } from '../ui.jsx'
 import {
   bookingProgress,
   cancelReason,
@@ -224,6 +224,9 @@ function BookingContent({ pnr, guest }) {
           </p>
         </div>
         <Badge map={BOOKING_STATUS} value={booking.status} />
+        <button type="button" className="btn-outline min-h-11 lg:hidden" onClick={openChat}>
+          Hỏi trợ lý về đặt chỗ
+        </button>
         <div className="text-meta text-muted">
           <p>{booking.contact_email}</p>
           <p>{booking.contact_phone}</p>
