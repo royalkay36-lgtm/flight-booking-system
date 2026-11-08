@@ -25,14 +25,17 @@ CREATE UNIQUE INDEX uq_users_email ON users (lower(email));
 -- 2. DANH MỤC: SÂN BAY, HÃNG BAY, MÁY BAY, SƠ ĐỒ GHẾ
 -- ---------------------------------------------------------------------
 CREATE TABLE airports (                       -- nguồn: OpenFlights airports.dat
-    iata_code char(3) PRIMARY KEY CHECK (iata_code ~ '^[A-Z]{3}$'),
-    icao_code text,
-    name      text NOT NULL,
-    city      text,
-    country   text NOT NULL,
-    latitude  numeric(9,6),
-    longitude numeric(9,6),
-    timezone  text                            -- IANA, ví dụ 'Asia/Ho_Chi_Minh'
+    iata_code   char(3) PRIMARY KEY CHECK (iata_code ~ '^[A-Z]{3}$'),
+    icao_code   text,
+    name        text NOT NULL,
+    city        text,
+    country     text NOT NULL,
+    latitude    numeric(9,6),
+    longitude   numeric(9,6),
+    timezone    text,                         -- IANA, ví dụ 'Asia/Ho_Chi_Minh'
+    image_url   text,
+    description text,
+    is_featured boolean NOT NULL DEFAULT false
 );
 
 CREATE TABLE airlines (
