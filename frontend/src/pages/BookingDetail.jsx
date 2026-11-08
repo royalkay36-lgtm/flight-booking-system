@@ -1,4 +1,3 @@
-import QRCode from 'qrcode'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import {
@@ -23,6 +22,7 @@ import {
   checkInReason,
   groupLegs,
 } from '../components/bookingDetailState.js'
+import BoardingPass from '../components/BoardingPass.jsx'
 import styles from './BookingDetail.module.css'
 
 const METHODS = {
@@ -166,6 +166,7 @@ function BookingContent({ pnr, guest }) {
     user?.id === booking.user_id ||
     ['STAFF', 'ADMIN'].includes(user?.role)
   const active = booking.tickets.filter((t) => t.status !== 'CANCELLED')
+  const issuedPasses = active.filter((ticket) => ['CHECKED_IN', 'BOARDED'].includes(ticket.status))
   const history = booking.tickets.filter((t) => t.status === 'CANCELLED')
   const legs = groupLegs(active.length ? active : history)
   const progress = bookingProgress(booking)
@@ -246,9 +247,16 @@ function BookingContent({ pnr, guest }) {
       )}
 
       <section aria-labelledby="itinerary-title" className="space-y-4">
-        <h2 id="itinerary-title" className="text-lead font-bold">
-          {progress.stopped ? 'Lịch sử hành trình' : 'Hành trình của bạn'}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="itinerary-title" className="text-lead font-bold">
+            {progress.stopped ? 'Lịch sử hành trình' : 'Hành trình của bạn'}
+          </h2>
+          {issuedPasses.length > 1 && (
+            <button className="btn-outline" onClick={() => setPass(issuedPasses)}>
+              Xem tất cả thẻ lên máy bay ({issuedPasses.length})
+            </button>
+          )}
+        </div>
         <p className="text-meta text-muted">
           Ngày giờ hiển thị theo giờ Việt Nam (UTC+7).
           {progress.stopped &&
@@ -346,10 +354,10 @@ function BookingContent({ pnr, guest }) {
                       Đã check-in: {fmtDateTime(ticket.checked_in_at)}
                     </p>
                   )}
-                  {['CHECKED_IN', 'BOARDED'].includes(ticket.status) && (
+                  {issuedPasses.includes(ticket) && (
                     <button
                       className="btn-outline"
-                      onClick={() => setPass({ ...ticket, pnr: booking.pnr })}
+                      onClick={() => setPass([ticket])}
                     >
                       Thẻ lên máy bay · {ticket.full_name} ·{' '}
                       {ticket.flight_number}
@@ -670,7 +678,7 @@ function BookingContent({ pnr, guest }) {
           </div>
         </Dialog>
       )}
-      {pass && <BoardingPass ticket={pass} onClose={() => setPass(null)} />}
+      {pass && <BoardingPass tickets={pass} pnr={booking.pnr} onClose={() => setPass(null)} />}
     </div>
   )
 }
@@ -889,81 +897,5 @@ function ChangePanel({ leg, pnr, guest, seats, busy, run, onDone }) {
         </div>
       )}
     </section>
-  )
-}
-
-function BoardingPass({ ticket, onClose }) {
-  const [qr, setQr] = useState('')
-  useEffect(() => {
-    QRCode.toDataURL(
-      `${ticket.pnr}|${ticket.ticket_number}|${ticket.flight_number}|${ticket.seat_code ?? ''}|${ticket.full_name}`,
-      { width: 180 },
-    ).then(setQr)
-  }, [ticket])
-  const boarding = new Date(
-    new Date(ticket.estimated_departure ?? ticket.departure_time).getTime() -
-      40 * 60000,
-  )
-  return (
-    <Dialog title="Thẻ lên máy bay" onClose={onClose}>
-      <div
-        className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="bg-sky-600 px-5 py-3 text-white">
-          <b>✈ SkyBooking</b> · Thẻ lên máy bay
-        </div>
-        <div className="grid grid-cols-2 gap-3 p-5 text-sm">
-          <div className="col-span-2 text-lg font-semibold">
-            {ticket.full_name}
-          </div>
-          <div>
-            <span className="label">Chuyến bay</span>
-            {ticket.flight_number}
-          </div>
-          <div>
-            <span className="label">Ngày</span>
-            {fmtDate(ticket.departure_time)}
-          </div>
-          <div>
-            <span className="label">Từ</span>
-            {ticket.origin_city} ({ticket.origin})
-          </div>
-          <div>
-            <span className="label">Đến</span>
-            {ticket.destination_city} ({ticket.destination})
-          </div>
-          <div>
-            <span className="label">Giờ lên máy bay</span>
-            <b>{fmtTime(boarding)}</b>
-          </div>
-          <div>
-            <span className="label">Ghế</span>
-            <b className="text-2xl">{ticket.seat_code ?? '—'}</b>
-          </div>
-          <div>
-            <span className="label">Mã đặt chỗ</span>
-            <span className="font-mono">{ticket.pnr}</span>
-          </div>
-          <div>
-            <span className="label">Số vé</span>
-            <span className="font-mono text-xs">{ticket.ticket_number}</span>
-          </div>
-          <div className="col-span-2 flex justify-center">
-            {qr && (
-              <img src={qr} alt={`Mã QR thẻ lên máy bay ${ticket.full_name}`} />
-            )}
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
-          <button className="btn-outline" onClick={() => window.print()}>
-            In
-          </button>
-          <button className="btn" onClick={onClose} autoFocus>
-            Đóng
-          </button>
-        </div>
-      </div>
-    </Dialog>
   )
 }
