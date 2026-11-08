@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import AwareDatetime, BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from ..auth import require_role
 from ..db import get_db
@@ -49,12 +49,72 @@ class VoucherUpdate(BaseModel):
     usage_limit: int | None = Field(None, gt=0)
 
 
+def _clean_image_url(v: str | None) -> str | None:
+    """Ảnh điểm đến: đường dẫn nội bộ (/…) hoặc URL http(s); chuỗi rỗng nghĩa là xoá ảnh."""
+    if v is None:
+        return None
+    v = v.strip()
+    if not v:
+        return None
+    if not v.startswith(("/", "http://", "https://")):
+        raise ValueError("Ảnh phải là đường dẫn nội bộ (/images/...) hoặc URL http(s)")
+    return v
+
+
+def _clean_description(v: str | None) -> str | None:
+    if v is None:
+        return None
+    return v.strip() or None
+
+
 class AirportIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     iata_code: str = Field(pattern=r"^[A-Z]{3}$")
-    name: str
-    city: str
-    country: str
-    timezone: str = "Asia/Ho_Chi_Minh"
+    name: str = Field(min_length=1, max_length=200)
+    city: str = Field(min_length=1, max_length=100)
+    country: str = Field(min_length=1, max_length=100)
+    timezone: str = Field("Asia/Ho_Chi_Minh", max_length=64)
+    image_url: str | None = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=500)
+    is_featured: bool = False
+
+    @field_validator("iata_code", mode="before")
+    @classmethod
+    def _uppercase_code(cls, v):
+        return v.strip().upper() if isinstance(v, str) else v
+
+    @field_validator("image_url")
+    @classmethod
+    def _validate_image_url(cls, v):
+        return _clean_image_url(v)
+
+    @field_validator("description")
+    @classmethod
+    def _validate_description(cls, v):
+        return _clean_description(v)
+
+
+class AirportUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str | None = Field(None, min_length=1, max_length=200)
+    city: str | None = Field(None, min_length=1, max_length=100)
+    country: str | None = Field(None, min_length=1, max_length=100)
+    timezone: str | None = Field(None, max_length=64)
+    image_url: str | None = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=500)
+    is_featured: bool | None = None
+
+    @field_validator("image_url")
+    @classmethod
+    def _validate_image_url(cls, v):
+        return _clean_image_url(v)
+
+    @field_validator("description")
+    @classmethod
+    def _validate_description(cls, v):
+        return _clean_description(v)
 
 
 class LayoutIn(BaseModel):
@@ -87,7 +147,9 @@ class UserUpdate(BaseModel):
 def catalog(user=Depends(admin_only), db=Depends(get_db)):
     """Danh mục cho các form quản trị."""
     return {
-        "airports": db.execute("SELECT iata_code, name, city, country FROM airports ORDER BY iata_code").fetchall(),
+        "airports": db.execute("""
+            SELECT iata_code, name, city, country, image_url, description, is_featured
+            FROM airports ORDER BY iata_code""").fetchall(),
         "airlines": db.execute("SELECT iata_code, name FROM airlines ORDER BY name").fetchall(),
         "models": db.execute("""
             SELECT m.code, m.name, count(s.id) AS seats FROM aircraft_models m
@@ -178,11 +240,39 @@ def update_voucher(code: str, body: VoucherUpdate, user=Depends(admin_only), db=
     return {"ok": True}
 
 
+AIRPORT_COLUMNS = "iata_code, name, city, country, timezone, image_url, description, is_featured"
+
+
 @router.post("/airports", status_code=201)
 def create_airport(body: AirportIn, user=Depends(admin_only), db=Depends(get_db)):
-    db.execute("INSERT INTO airports (iata_code, name, city, country, timezone) VALUES (%s, %s, %s, %s, %s)",
-               (body.iata_code, body.name, body.city, body.country, body.timezone))
-    return {"ok": True}
+    row = db.execute(f"""
+        INSERT INTO airports (iata_code, name, city, country, timezone, image_url, description, is_featured)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING {AIRPORT_COLUMNS}""",
+        (body.iata_code, body.name, body.city, body.country, body.timezone,
+         body.image_url, body.description, body.is_featured)).fetchone()
+    return {"ok": True, "airport": row}
+
+
+@router.patch("/airports/{iata_code}")
+def update_airport(iata_code: str, body: AirportUpdate, user=Depends(admin_only), db=Depends(get_db)):
+    """Sửa thông tin sân bay, gồm ảnh, mô tả và trạng thái điểm đến nổi bật.
+
+    PATCH thật sự: chỉ cập nhật các trường được gửi lên; gửi null (hoặc chuỗi rỗng với ảnh /
+    mô tả) để xoá giá trị. Không dùng coalesce để tránh việc không thể xoá ảnh cũ.
+    """
+    updates = body.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(400, "Không có thay đổi nào để cập nhật")
+    columns = ", ".join(f"{name} = %s" for name in updates)  # tên cột lấy từ model Pydantic
+    row = db.execute(f"""
+        UPDATE airports SET {columns}
+        WHERE iata_code = %s
+        RETURNING {AIRPORT_COLUMNS}""",
+        (*updates.values(), iata_code.strip().upper())).fetchone()
+    if row is None:
+        raise HTTPException(404, "Không tìm thấy sân bay")
+    return {"ok": True, "airport": row}
 
 
 @router.post("/aircraft-models", status_code=201)
