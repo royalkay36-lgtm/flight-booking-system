@@ -16,10 +16,26 @@ MAX_HOLDS_PER_FLIGHT = 9  # chống một tài khoản giữ hết ghế của c
 def airports(db=Depends(get_db)):
     """Sân bay đang có chuyến bay (cho ô chọn điểm đi / điểm đến)."""
     return db.execute("""
-        SELECT iata_code, name, city, country FROM airports
+        SELECT iata_code, name, city, country, image_url, description FROM airports
         WHERE iata_code IN (SELECT origin FROM flights UNION SELECT destination FROM flights)
         ORDER BY city""").fetchall()
 
+@router.get("/destinations/featured")
+def featured_destinations(db=Depends(get_db)):
+    """Danh sách điểm đến nổi bật kèm giá vé thấp nhất từ HAN hoặc SGN."""
+    return db.execute("""
+        SELECT a.iata_code, a.name, a.city, a.country, a.image_url, a.description,
+               min(f.price) AS min_price
+        FROM airports a
+        LEFT JOIN v_flight_search f
+               ON f.destination = a.iata_code
+              AND f.origin IN ('HAN', 'SGN')
+              AND f.departure_time > now()
+              AND f.status <> 'CANCELLED'
+              AND f.seats_available > 0
+        WHERE a.is_featured = true
+        GROUP BY a.iata_code, a.name, a.city, a.country, a.image_url, a.description
+        ORDER BY min_price NULLS LAST, a.city""").fetchall()
 
 @router.get("/flights/search")
 def search(origin: str, destination: str, date: dt.date, passengers: int = Query(1, ge=1, le=9), db=Depends(get_db)):
