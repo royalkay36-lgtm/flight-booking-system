@@ -465,31 +465,33 @@ function BookingContent({ pnr, guest }) {
               Áp dụng cho toàn bộ hành khách trên chặng được chọn. Xem báo giá
               trước khi xác nhận.
             </p>
-            {legs.map((leg) => {
-              const reason = changeReason(booking, leg, now)
-              return (
-                <div key={leg.flight_id} className="w-full space-y-2">
-                  <button
-                    className="btn-outline w-full"
-                    disabled={blocked || !canAct || !!reason}
-                    aria-expanded={changing === leg.flight_id}
-                    aria-controls={
-                      changing === leg.flight_id
-                        ? `change-${leg.flight_id}`
-                        : undefined
-                    }
-                    onClick={() =>
-                      setChanging(
-                        changing === leg.flight_id ? null : leg.flight_id,
-                      )
-                    }
-                  >
-                    Đổi chuyến {leg.flight_number}
-                  </button>
-                  {reason && <p>{reason}</p>}
-                </div>
-              )
-            })}
+            <div className={styles.actionControls}>
+              {legs.map((leg) => {
+                const reason = changeReason(booking, leg, now)
+                return (
+                  <div key={leg.flight_id} className="w-full space-y-2">
+                    <button
+                      className="btn-outline w-full"
+                      disabled={blocked || !canAct || !!reason}
+                      aria-expanded={changing === leg.flight_id}
+                      aria-controls={
+                        changing === leg.flight_id
+                          ? `change-${leg.flight_id}`
+                          : undefined
+                      }
+                      onClick={() =>
+                        setChanging(
+                          changing === leg.flight_id ? null : leg.flight_id,
+                        )
+                      }
+                    >
+                      Đổi chuyến {leg.flight_number}
+                    </button>
+                    {reason && <p>{reason}</p>}
+                  </div>
+                )
+              })}
+            </div>
           </div>
           <div className={styles.action}>
             <h3>Hủy đặt chỗ</h3>
@@ -497,26 +499,28 @@ function BookingContent({ pnr, guest }) {
               Hủy toàn bộ đặt chỗ {booking.pnr}, gồm tất cả hành khách và chặng
               còn hiệu lực.
             </p>
-            {booking.refund?.notes?.map((note) => (
-              <p key={note}>{note}</p>
-            ))}
-            {booking.status === 'CONFIRMED' &&
-              booking.refund?.amount != null && (
-                <p>
-                  Tiền hoàn theo báo giá:{' '}
-                  <strong>{money(booking.refund.amount)}</strong>
-                </p>
+            <div className={styles.actionControls}>
+              {booking.refund?.notes?.map((note) => (
+                <p key={note}>{note}</p>
+              ))}
+              {booking.status === 'CONFIRMED' &&
+                booking.refund?.amount != null && (
+                  <p>
+                    Tiền hoàn theo báo giá:{' '}
+                    <strong>{money(booking.refund.amount)}</strong>
+                  </p>
+                )}
+              {cancelWhy && !booking.refund?.notes?.includes(cancelWhy) && (
+                <p>{cancelWhy}</p>
               )}
-            {cancelWhy && !booking.refund?.notes?.includes(cancelWhy) && (
-              <p>{cancelWhy}</p>
-            )}
-            <button
-              className="btn-outline border-red-300 text-red-800"
-              disabled={blocked || !canAct || !!cancelWhy}
-              onClick={() => setConfirmCancel(true)}
-            >
-              Hủy đặt chỗ
-            </button>
+              <button
+                className="btn-outline border-red-300 text-red-800"
+                disabled={blocked || !canAct || !!cancelWhy}
+                onClick={() => setConfirmCancel(true)}
+              >
+                Hủy đặt chỗ
+              </button>
+            </div>
           </div>
           <div className={styles.action}>
             <h3>Check-in</h3>
@@ -524,48 +528,50 @@ function BookingContent({ pnr, guest }) {
               Làm thủ tục riêng cho từng vé. {progress.completed}/
               {progress.total} vé còn hiệu lực đã check-in.
             </p>
-            {active.map((ticket) => {
-              const reason = checkInReason(booking, ticket, now)
-              return (
-                <div key={ticket.id} className="w-full space-y-2">
-                  <p className="font-semibold">
-                    {ticket.full_name} · {ticket.flight_number}
-                  </p>
-                  {['CHECKED_IN', 'BOARDED'].includes(ticket.status) ? (
-                    <span className="text-meta">Đã check-in ✓</span>
-                  ) : (
-                    <>
-                      <button
-                        className="btn-outline w-full"
-                        disabled={blocked || !canAct || !!reason}
-                        onClick={() =>
-                          run(
-                            `check-${ticket.id}`,
-                            () =>
-                              api(`/tickets/${ticket.id}/check-in${guest}`, {
-                                method: 'POST',
-                              }),
-                            (r) =>
-                              r.assigned_seat
-                                ? `Check-in thành công cho ${ticket.full_name}, ghế ${r.assigned_seat}.`
-                                : `Check-in thành công cho ${ticket.full_name}.`,
-                          )
-                        }
-                      >
-                        {busy === `check-${ticket.id}`
-                          ? 'Đang check-in…'
-                          : `Check-in · ${ticket.full_name} · ${ticket.flight_number}`}
-                      </button>
-                      {reason && <p>{reason}</p>}
-                    </>
-                  )}
-                </div>
-              )
-            })}
-            {!active.length && <p>Không có vé còn hiệu lực để check-in.</p>}
-            {!!checkable.length && (
-              <p>{checkable.length} vé đang trong thời gian check-in.</p>
-            )}
+            <div className={styles.actionControls}>
+              {active.map((ticket) => {
+                const reason = checkInReason(booking, ticket, now)
+                return (
+                  <div key={ticket.id} className="w-full space-y-2">
+                    <p className="font-semibold">
+                      {ticket.full_name} · {ticket.flight_number}
+                    </p>
+                    {['CHECKED_IN', 'BOARDED'].includes(ticket.status) ? (
+                      <span className="text-meta">Đã check-in ✓</span>
+                    ) : (
+                      <>
+                        <button
+                          className="btn-outline w-full"
+                          disabled={blocked || !canAct || !!reason}
+                          onClick={() =>
+                            run(
+                              `check-${ticket.id}`,
+                              () =>
+                                api(`/tickets/${ticket.id}/check-in${guest}`, {
+                                  method: 'POST',
+                                }),
+                              (r) =>
+                                r.assigned_seat
+                                  ? `Check-in thành công cho ${ticket.full_name}, ghế ${r.assigned_seat}.`
+                                  : `Check-in thành công cho ${ticket.full_name}.`,
+                            )
+                          }
+                        >
+                          {busy === `check-${ticket.id}`
+                            ? 'Đang check-in…'
+                            : `Check-in · ${ticket.full_name} · ${ticket.flight_number}`}
+                        </button>
+                        {reason && <p>{reason}</p>}
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+              {!active.length && <p>Không có vé còn hiệu lực để check-in.</p>}
+              {!!checkable.length && (
+                <p>{checkable.length} vé đang trong thời gian check-in.</p>
+              )}
+            </div>
           </div>
         </div>
         {changing &&
