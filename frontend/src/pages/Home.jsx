@@ -75,15 +75,51 @@ const REASONS = [
   ['shield', 'Thanh toán an toàn', 'Thanh toán qua cổng thanh toán uy tín, thông tin của bạn được bảo mật.'],
 ]
 
+// Dự phòng khi trình duyệt không có Clipboard API (http không bảo mật, trình duyệt cũ) hoặc bị từ chối quyền
+function legacyCopy(text) {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.setAttribute('readonly', '')
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'
+  document.body.appendChild(ta)
+  ta.select()
+  let ok = false
+  try { ok = document.execCommand('copy') } catch { ok = false }
+  document.body.removeChild(ta)
+  return ok
+}
+
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch { /* bị từ chối: chuyển sang cách dự phòng */ }
+  return legacyCopy(text)
+}
+
 export default function Home() {
   const [params, setParams] = useSearchParams()
   const tab = TABS[params.get('tab')] ? params.get('tab') : 'book'
+  // Khuyến mãi lấy từ GET /vouchers/public: [{ code, description, valid_to }]. Không dùng dữ liệu cứng làm dự phòng.
   const [vouchers, setVouchers] = useState([])
+  const [vouchersStatus, setVouchersStatus] = useState('loading')   // loading | ready | error
   const [airports, setAirports] = useState([])
   const [airportsError, setAirportsError] = useState(false)
   const [trip, setTrip] = useState(null)        // giá trị hiện tại của form tìm chuyến
+  const loadVouchers = () => {
+    setVouchersStatus('loading')
+    api('/vouchers/public')
+      .then((data) => {
+        // Backend đã lọc mã hết hạn; lọc lại phía trình duyệt phòng khi trang mở lâu qua thời điểm hết hạn
+        setVouchers((Array.isArray(data) ? data : []).filter((v) => new Date(v.valid_to) > new Date()))
+        setVouchersStatus('ready')
+      })
+      .catch(() => setVouchersStatus('error'))
+  }
   useEffect(() => {
-    api('/vouchers/public').then(setVouchers).catch(() => { })
+    loadVouchers()
     api('/airports').then(setAirports).catch(() => setAirportsError(true))
   }, [])
 
@@ -182,32 +218,70 @@ export default function Home() {
         </div>
       </section>
 
-      {vouchers.length > 0 && (
-        <section className="mt-24 space-y-5" aria-labelledby="deals-title">
+      {/* 3. Khuyến mãi (từ API). Rỗng thì ẩn cả mục; lỗi thì báo và cho thử lại, không hiện dữ liệu cứng */}
+      {(vouchersStatus !== 'ready' || vouchers.length > 0) && (
+        <section className="mt-24 space-y-5" aria-labelledby="deals-title" aria-busy={vouchersStatus === 'loading'}>
           <div className="reveal">
             <h2 id="deals-title" className="text-title font-bold tracking-tight">Khuyến mãi đang diễn ra</h2>
             <p className="mt-1 text-muted">Nhập mã ở bước thanh toán để được giảm giá.</p>
           </div>
-          {/* auto-fit: 2 hay 3 phiếu đều phủ kín chiều ngang, không chừa ô trống */}
-          <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))]">
-            {vouchers.map((v) => (
-              <div key={v.code} className="reveal relative flex overflow-hidden rounded-2xl border border-[#f3d9a4] bg-[#fffaf0]">
-                <div className="flex w-36 flex-none flex-col justify-center border-r border-dashed border-[#e9c27a] px-4 py-5">
-                  <span className="text-meta text-[#7a4a00]">Mã</span>
-                  <span className="font-bold tracking-[0.06em] text-[#7a4a00]">{v.code}</span>
-                </div>
-                <span className="absolute left-[136px] -top-2 h-4 w-4 rounded-full border border-[#f3d9a4] bg-ground" aria-hidden="true" />
-                <span className="absolute -bottom-2 left-[136px] h-4 w-4 rounded-full border border-[#f3d9a4] bg-ground" aria-hidden="true" />
-                <div className="min-w-0 flex-1 p-4">
-                  <p className="font-medium">{v.description}</p>
-                  <p className="mt-1 text-meta text-muted">Hạn dùng đến {fmtDate(v.valid_to)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          {vouchersStatus === 'loading' && (
+            <div className="flex gap-4 overflow-hidden lg:grid lg:grid-cols-3">
+              <span className="sr-only">Đang tải khuyến mãi…</span>
+              {[1, 2, 3].map((n) => (
+                <div key={n} aria-hidden="true" className="h-44 w-[85%] flex-none animate-pulse rounded-2xl border border-[#f3d9a4] bg-[#fffaf0] sm:w-[60%] lg:w-auto" />
+              ))}
+            </div>
+          )}
+          {vouchersStatus === 'error' && (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-white p-5">
+              <p className="text-muted">Không tải được khuyến mãi.</p>
+              <button type="button" className="btn-outline" onClick={loadVouchers}>Thử lại</button>
+            </div>
+          )}
+          {vouchersStatus === 'ready' && (
+            // Điện thoại/máy tính bảng cuộn ngang trong khung, máy tính 3 cột
+            <ul className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 lg:grid lg:grid-cols-3 lg:overflow-visible lg:pb-0">
+              {vouchers.map((v) => <PromoCard key={v.code} voucher={v} />)}
+            </ul>
+          )}
         </section>
       )}
     </div>
+  )
+}
+
+// Thẻ khuyến mãi: chỉ hiện các trường API trả về (code, description, valid_to)
+function PromoCard({ voucher }) {
+  const [status, setStatus] = useState('idle')   // idle | copied | failed
+  const timer = useRef(null)
+  useEffect(() => () => clearTimeout(timer.current), [])
+
+  const copy = async () => {
+    const ok = await copyText(voucher.code)
+    setStatus(ok ? 'copied' : 'failed')
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setStatus('idle'), 2000)
+  }
+
+  return (
+    <li className="relative flex w-[85%] flex-none snap-start flex-col rounded-2xl border border-[#f3d9a4] bg-[#fffaf0] p-5 sm:w-[60%] lg:w-auto">
+      <p className="flex-1 font-medium">{voucher.description}</p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-dashed border-[#e9c27a] pt-4">
+        <div>
+          <span className="block text-meta text-[#7a4a00]">Mã</span>
+          <span className="font-bold tracking-[0.06em] text-[#7a4a00]">{voucher.code}</span>
+        </div>
+        <button type="button" onClick={copy} aria-label={`Sao chép mã ${voucher.code}`} className="btn-outline">
+          {status === 'copied' ? 'Đã sao chép' : status === 'failed' ? 'Hãy chép tay' : 'Sao chép mã'}
+        </button>
+      </div>
+      {/* fmtDate định dạng dd/mm/yyyy theo giờ Việt Nam (Asia/Ho_Chi_Minh), không lệch ngày */}
+      <p className="mt-3 text-meta text-muted">Hạn dùng đến {fmtDate(voucher.valid_to)}</p>
+      <span className="sr-only" aria-live="polite">
+        {status === 'copied' ? `Đã sao chép mã ${voucher.code}` : status === 'failed' ? `Không sao chép được, mã là ${voucher.code}` : ''}
+      </span>
+    </li>
   )
 }
 
