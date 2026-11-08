@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { api, fmtDate, isoDate } from '../api.js'
 import { ErrorText, FlapText, PlaneMark } from '../ui.jsx'
+import DestinationCards from '../components/DestinationCards.jsx'
 
 // [nhãn đầy đủ, nhãn ngắn trên điện thoại]
 const TABS = { book: ['Mua vé', 'Mua vé'], manage: ['Quản lý đặt chỗ', 'Quản lý vé'], checkin: ['Làm thủ tục', 'Thủ tục'] }
@@ -12,15 +13,62 @@ const STEPS = [
   ['Nhận vé, làm thủ tục', 'Vé điện tử gửi qua email, làm thủ tục trực tuyến và nhận thẻ lên máy bay có mã QR.'],
 ]
 
+// Icon SVG viết tay (dự án chưa có thư viện icon), nét theo currentColor
+const svgProps = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }
+const ICONS = {
+  tag: <svg {...svgProps}><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="8" cy="8" r="1.5" /></svg>,
+  bolt: <svg {...svgProps}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" /></svg>,
+  headset: <svg {...svgProps}><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><rect x="3" y="14" width="4" height="6" rx="1.5" /><rect x="17" y="14" width="4" height="6" rx="1.5" /><path d="M19 20a3 3 0 0 1-3 2h-3" /></svg>,
+  shield: <svg {...svgProps}><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z" /><path d="m8.5 12 2.5 2.5 4.5-5" /></svg>,
+}
+
+// NỘI DUNG TẠM: chỉnh lại câu chữ cho đúng dịch vụ thực tế. Chưa đưa số liệu cụ thể nào.
+const REASONS = [
+  ['tag', 'Giá minh bạch', 'Giá hiển thị đã gồm thuế và phí, không phát sinh phí ẩn khi thanh toán.'],
+  ['bolt', 'Đặt vé nhanh', 'Tìm chuyến, chọn ghế và thanh toán ngay trên một trang, không cần ra quầy.'],
+  ['headset', 'Hỗ trợ 24/7', 'Đội ngũ chăm sóc khách hàng và trợ lý ảo luôn sẵn sàng giải đáp mọi lúc.'],
+  ['shield', 'Thanh toán an toàn', 'Thanh toán qua cổng thanh toán uy tín, thông tin của bạn được bảo mật.'],
+]
+
+// DỮ LIỆU TẠM: thay bằng dữ liệu thật khi có. CHAOBAN và BAYVUI100 khớp voucher trong database/03_seed.sql;
+// HANHLY là mã minh hoạ, chưa có trong database nên nhập ở bước thanh toán sẽ không dùng được.
+const PROMOS = [
+  { title: 'Ưu đãi chào bạn mới', description: 'Giảm 10% cho đơn từ 500.000đ, tối đa 200.000đ.', code: 'CHAOBAN', validTo: '2026-12-31' },
+  { title: 'Bay vui giảm ngay', description: 'Giảm 100.000đ cho đơn từ 1.500.000đ.', code: 'BAYVUI100', validTo: '2026-12-31' },
+  { title: 'Ưu đãi hành lý', description: 'Ưu đãi khi mua thêm hành lý ký gửi cùng vé máy bay.', code: 'HANHLY', validTo: '2026-12-31' },
+]
+
+// Dự phòng khi trình duyệt không có Clipboard API (http không bảo mật, trình duyệt cũ) hoặc bị từ chối quyền
+function legacyCopy(text) {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.setAttribute('readonly', '')
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'
+  document.body.appendChild(ta)
+  ta.select()
+  let ok = false
+  try { ok = document.execCommand('copy') } catch { ok = false }
+  document.body.removeChild(ta)
+  return ok
+}
+
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch { /* bị từ chối: chuyển sang cách dự phòng */ }
+  return legacyCopy(text)
+}
+
 export default function Home() {
   const [params, setParams] = useSearchParams()
   const tab = TABS[params.get('tab')] ? params.get('tab') : 'book'
-  const [vouchers, setVouchers] = useState([])
   const [airports, setAirports] = useState([])
   const [airportsError, setAirportsError] = useState(false)
   const [trip, setTrip] = useState(null)        // giá trị hiện tại của form tìm chuyến
   useEffect(() => {
-    api('/vouchers/public').then(setVouchers).catch(() => {})
     api('/airports').then(setAirports).catch(() => setAirportsError(true))
   }, [])
 
@@ -63,6 +111,26 @@ export default function Home() {
         {tab !== 'book' && <LookupForm key={tab} checkin={tab === 'checkin'} />}
       </div>
 
+      {/* 1. Điểm đến (component của B, đã có sẵn tiêu đề và tự ẩn khi API lỗi) */}
+      <DestinationCards />
+
+      {/* 2. Vì sao chọn SkyBooking */}
+      <section className="mt-24" aria-labelledby="why-title">
+        <h2 id="why-title" className="reveal text-title font-bold tracking-tight">Vì sao chọn SkyBooking</h2>
+        <p className="reveal mt-1 text-muted">Đặt vé máy bay đơn giản, rõ ràng và yên tâm từ đầu đến cuối.</p>
+        <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {REASONS.map(([icon, title, text]) => (
+            <li key={title} className="reveal card">
+              <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand-tint text-brand-strong [&>svg]:h-6 [&>svg]:w-6">
+                {ICONS[icon]}
+              </span>
+              <h3 className="mt-4 text-lead font-semibold">{title}</h3>
+              <p className="mt-1 text-muted">{text}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
       <section className="mt-24" aria-labelledby="steps-title">
         <h2 id="steps-title" className="reveal text-title font-bold tracking-tight">Từ lúc chọn chuyến đến lúc lên máy bay</h2>
         <p className="reveal mt-1 text-muted">Ba chặng, làm hết trên một trang, không cần ra quầy.</p>
@@ -83,32 +151,50 @@ export default function Home() {
         </div>
       </section>
 
-      {vouchers.length > 0 && (
-        <section className="mt-24 space-y-5" aria-labelledby="deals-title">
-          <div className="reveal">
-            <h2 id="deals-title" className="text-title font-bold tracking-tight">Khuyến mãi đang diễn ra</h2>
-            <p className="mt-1 text-muted">Nhập mã ở bước thanh toán để được giảm giá.</p>
-          </div>
-          {/* auto-fit: 2 hay 3 phiếu đều phủ kín chiều ngang, không chừa ô trống */}
-          <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))]">
-            {vouchers.map((v) => (
-              <div key={v.code} className="reveal relative flex overflow-hidden rounded-2xl border border-[#f3d9a4] bg-[#fffaf0]">
-                <div className="flex w-36 flex-none flex-col justify-center border-r border-dashed border-[#e9c27a] px-4 py-5">
-                  <span className="text-meta text-[#7a4a00]">Mã</span>
-                  <span className="font-bold tracking-[0.06em] text-[#7a4a00]">{v.code}</span>
-                </div>
-                <span className="absolute left-[136px] -top-2 h-4 w-4 rounded-full border border-[#f3d9a4] bg-ground" aria-hidden="true" />
-                <span className="absolute -bottom-2 left-[136px] h-4 w-4 rounded-full border border-[#f3d9a4] bg-ground" aria-hidden="true" />
-                <div className="min-w-0 flex-1 p-4">
-                  <p className="font-medium">{v.description}</p>
-                  <p className="mt-1 text-meta text-muted">Hạn dùng đến {fmtDate(v.valid_to)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* 3. Khuyến mãi: điện thoại/máy tính bảng cuộn ngang trong khung, máy tính 3 cột */}
+      <section className="mt-24 space-y-5" aria-labelledby="deals-title">
+        <div className="reveal">
+          <h2 id="deals-title" className="text-title font-bold tracking-tight">Khuyến mãi đang diễn ra</h2>
+          <p className="mt-1 text-muted">Nhập mã ở bước thanh toán để được giảm giá.</p>
+        </div>
+        <ul className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 lg:grid lg:grid-cols-3 lg:overflow-visible lg:pb-0">
+          {PROMOS.map((p) => <PromoCard key={p.code} promo={p} />)}
+        </ul>
+      </section>
     </div>
+  )
+}
+
+function PromoCard({ promo }) {
+  const [status, setStatus] = useState('idle')   // idle | copied | failed
+  const timer = useRef(null)
+  useEffect(() => () => clearTimeout(timer.current), [])
+
+  const copy = async () => {
+    const ok = await copyText(promo.code)
+    setStatus(ok ? 'copied' : 'failed')
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setStatus('idle'), 2000)
+  }
+
+  return (
+    <li className="relative flex w-[85%] flex-none snap-start flex-col rounded-2xl border border-[#f3d9a4] bg-[#fffaf0] p-5 sm:w-[60%] lg:w-auto">
+      <h3 className="text-lead font-semibold">{promo.title}</h3>
+      <p className="mt-1 flex-1 text-muted">{promo.description}</p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-dashed border-[#e9c27a] pt-4">
+        <div>
+          <span className="block text-meta text-[#7a4a00]">Mã</span>
+          <span className="font-bold tracking-[0.06em] text-[#7a4a00]">{promo.code}</span>
+        </div>
+        <button type="button" onClick={copy} aria-label={`Sao chép mã ${promo.code}`} className="btn-outline">
+          {status === 'copied' ? 'Đã sao chép' : status === 'failed' ? 'Hãy chép tay' : 'Sao chép mã'}
+        </button>
+      </div>
+      <p className="mt-3 text-meta text-muted">Hạn dùng đến {fmtDate(promo.validTo)}</p>
+      <span className="sr-only" aria-live="polite">
+        {status === 'copied' ? `Đã sao chép mã ${promo.code}` : status === 'failed' ? `Không sao chép được, mã là ${promo.code}` : ''}
+      </span>
+    </li>
   )
 }
 
@@ -199,7 +285,7 @@ function SearchForm({ airports, error, onChange }) {
         </label>
         <label className="block"><span className="label">Ngày về</span>
           <input type="date" className="input" disabled={form.trip !== 'round'} required={form.trip === 'round'}
-                 min={form.date} value={form.returnDate} onChange={set('returnDate')} />
+            min={form.date} value={form.returnDate} onChange={set('returnDate')} />
         </label>
       </div>
       <div className="flex flex-wrap items-end gap-4">
