@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { api, CABIN, fmtDate, fmtTime, FLIGHT_STATUS, hourOf, isoDate, money } from '../api.js'
 import { Badge, ErrorText } from '../ui.jsx'
+import DestinationBanner from '../components/DestinationBanner.jsx'
 
 const SLOTS = { '': 'Cả ngày', '0-12': 'Sáng (00–12h)', '12-18': 'Chiều (12–18h)', '18-24': 'Tối (18–24h)' }
 const inSlot = (iso, slot) => {
@@ -14,6 +15,20 @@ const inSlot = (iso, slot) => {
 // Gom các dòng (chuyến x hạng vé) thành chuyến bay kèm danh sách hạng vé
 const groupFlights = (rows) =>
   Object.values(rows.reduce((m, r) => ((m[r.flight_id] ??= { ...r, fares: [] }).fares.push(r), m), {}))
+
+const DEFAULT_FILTER = { airlines: [], cabin: '', maxPrice: '', dep: '', arr: '' }
+
+// Sắp xếp: so sánh bằng số (giá, mốc thời gian ms, phút), hoà thì xếp theo giá tăng dần
+const SORTS = { price: 'Giá thấp nhất', dep: 'Giờ đi sớm nhất', duration: 'Thời lượng ngắn nhất' }
+const minFare = (f) => Math.min(...f.fares.map((fr) => Number(fr.price)))
+const depMs = (f) => new Date(f.departure_time).getTime()
+const durationMin = (f) => (new Date(f.arrival_time).getTime() - depMs(f)) / 60000
+const SORT_KEY = { price: minFare, dep: depMs, duration: durationMin }
+// Trả về bản sao đã sắp xếp, không đụng tới mảng gốc
+const sortFlights = (flights, by) => {
+  const key = SORT_KEY[by] ?? minFare
+  return [...flights].sort((a, b) => (key(a) - key(b)) || (minFare(a) - minFare(b)))
+}
 
 // Tính thời lượng bay từ giờ khởi hành và giờ hạ cánh (định dạng "Xh Ym")
 function formatFlightDuration(dep, arr) {
@@ -93,6 +108,181 @@ function AirlineLogo({ code, name }) {
   )
 }
 
+// Tính khoảng cách ngày lịch (YYYY-MM-DD) theo UTC để không lệch múi giờ
+function parseYMD(ymd) {
+  const [y, m, d] = String(ymd).split('-').map(Number)
+  return Date.UTC(y, m - 1, d)
+}
+
+function dayDiff(a, b) {
+  return Math.round((parseYMD(a) - parseYMD(b)) / 86400000)
+}
+
+function shiftYMD(ymd, deltaDays) {
+  const [y, m, d] = String(ymd).split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + deltaDays)).toISOString().slice(0, 10)
+}
+
+function fmtShortDay(ymd) {
+  const [y, m, d] = String(ymd).split('-').map(Number)
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay()
+  const wd = dow === 0 ? 'CN' : `T${dow + 1}`
+  return `${wd}, ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
+}
+
+function fmtAriaDay(ymd, price) {
+  const [, m, d] = String(ymd).split('-').map(Number)
+  const formattedPrice = Math.round(Number(price)).toLocaleString('vi-VN')
+  return `Tìm chuyến ngày ${d} tháng ${m}, giá từ ${formattedPrice} đồng`
+}
+
+// Chọn tối đa 3 ngày CÓ chuyến trong khoảng ±7 ngày quanh ngày tìm kiếm (gần nhất trước; hoà thì rẻ hơn trước)
+function pickSuggestedDays(rows, targetDate) {
+  if (!Array.isArray(rows) || !targetDate) return []
+  return rows
+    .filter((r) => {
+      if (!r?.date || r.date === targetDate) return false
+      const price = Number(r.min_price ?? r.price)
+      if (!Number.isFinite(price) || price <= 0) return false
+      const diff = Math.abs(dayDiff(r.date, targetDate))
+      return diff >= 1 && diff <= 7
+    })
+    .map((r) => ({ date: r.date, min_price: Number(r.min_price ?? r.price) }))
+    .sort((a, b) => {
+      const da = Math.abs(dayDiff(a.date, targetDate))
+      const db = Math.abs(dayDiff(b.date, targetDate))
+      return (da - db) || (a.min_price - b.min_price) || a.date.localeCompare(b.date)
+    })
+    .slice(0, 3)
+}
+
+const SHIMMER_CSS = `
+@keyframes skyShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton-shimmer {
+  background-color: #e2e9f0;
+  background-image: linear-gradient(90deg, #e2e9f0 0%, #f4f8fb 50%, #e2e9f0 100%);
+  background-size: 200% 100%;
+  animation: skyShimmer 1.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none !important;
+    background-image: none !important;
+  }
+}
+`
+
+// Thẻ khung xương (skeleton) có bố cục 2 tầng khớp thẻ chuyến bay thật để không nhảy giao diện
+function FlightCardSkeleton() {
+  return (
+    <div className="card space-y-3.5" aria-hidden="true">
+      {/* Tầng 1: Ô tròn logo + tên hãng & số hiệu */}
+      <div className="flex items-center justify-between gap-3 border-b border-rule pb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-10 w-10 flex-none rounded-full skeleton-shimmer motion-reduce:animate-none" />
+          <div className="flex items-center gap-2.5">
+            <div className="h-4 w-32 rounded-md skeleton-shimmer motion-reduce:animate-none" />
+            <div className="h-3.5 w-16 rounded-md skeleton-shimmer motion-reduce:animate-none" />
+          </div>
+        </div>
+        <div className="h-4 w-16 rounded-full skeleton-shimmer motion-reduce:animate-none hidden sm:block" />
+      </div>
+
+      {/* Tầng 2: Hai khối giờ đi/đến với đường nối ở giữa + khối giá và nút */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+        <div className="flex items-center gap-4 sm:gap-7 min-w-0">
+          <div className="space-y-1.5 shrink-0">
+            <div className="h-7 sm:h-8 w-16 rounded-md skeleton-shimmer motion-reduce:animate-none" />
+            <div className="h-3.5 w-10 rounded-md skeleton-shimmer motion-reduce:animate-none" />
+          </div>
+
+          <div className="flex flex-col items-center px-2 min-w-[110px] sm:min-w-[140px] shrink-0">
+            <div className="h-3 w-12 rounded-md skeleton-shimmer motion-reduce:animate-none" />
+            <div className="my-2 h-0.5 w-full bg-rule" />
+            <div className="h-3 w-16 rounded-md skeleton-shimmer motion-reduce:animate-none" />
+          </div>
+
+          <div className="space-y-1.5 shrink-0">
+            <div className="h-7 sm:h-8 w-16 rounded-md skeleton-shimmer motion-reduce:animate-none" />
+            <div className="h-3.5 w-10 rounded-md skeleton-shimmer motion-reduce:animate-none" />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between sm:justify-end gap-3 pt-3 sm:pt-0 border-t border-rule sm:border-t-0 shrink-0">
+          <div className="h-6 sm:h-7 w-28 rounded-md skeleton-shimmer motion-reduce:animate-none" />
+          <div className="h-9 w-24 rounded-full skeleton-shimmer motion-reduce:animate-none" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Khối thông báo khi không có chuyến bay (phân biệt rỗng do bộ lọc vs rỗng do ngày tìm kiếm)
+function EmptyFlightsState({ hasUnfilteredFlights, suggestedDays, onClearFilter, onPickDate, onChangeSearchDate }) {
+  const minSuggestedPrice =
+    suggestedDays.length > 0 ? Math.min(...suggestedDays.map((d) => d.min_price)) : Infinity
+
+  return (
+    <div role="status" className="card py-8 text-center space-y-4">
+      <div className="space-y-1.5">
+        <h3 className="text-lead font-semibold text-ink">Không tìm thấy chuyến bay</h3>
+        {hasUnfilteredFlights ? (
+          <p className="text-ui text-muted">Không có chuyến nào khớp bộ lọc</p>
+        ) : (
+          <p className="text-ui text-muted">Không có chuyến bay vào ngày này</p>
+        )}
+      </div>
+
+      {hasUnfilteredFlights ? (
+        <div>
+          <button type="button" className="btn-outline cursor-pointer" onClick={onClearFilter}>
+            Xóa bộ lọc
+          </button>
+        </div>
+      ) : suggestedDays.length > 0 ? (
+        <div className="mx-auto max-w-xl space-y-3 pt-2">
+          <h4 className="text-meta font-semibold text-muted">Ngày gần nhất còn chuyến</h4>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {suggestedDays.map((d) => {
+              const isCheapestDay = d.min_price === minSuggestedPrice
+              return (
+                <button
+                  key={d.date}
+                  type="button"
+                  aria-label={fmtAriaDay(d.date, d.min_price)}
+                  onClick={() => onPickDate(d.date)}
+                  className="flex flex-col items-center justify-center gap-1 rounded-xl border border-line bg-white px-4 py-3.5 text-center transition-all cursor-pointer hover:border-brand hover:bg-brand-wash focus-visible:outline-2 focus-visible:outline-brand"
+                >
+                  {isCheapestDay && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-xs font-bold text-emerald-800 whitespace-nowrap">
+                      ★ Rẻ nhất
+                    </span>
+                  )}
+                  <span className="font-semibold text-ink text-ui num whitespace-nowrap">
+                    {fmtShortDay(d.date)}
+                  </span>
+                  <span className="font-bold text-brand-strong text-ui num whitespace-nowrap">
+                    {money(d.min_price)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ) : (
+        <div>
+          <button type="button" className="btn-outline cursor-pointer" onClick={onChangeSearchDate}>
+            Đổi ngày tìm kiếm
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Lịch giá rẻ: giá thấp nhất mỗi ngày quanh ngày đang chọn; bấm để đổi ngày
 function FareStrip({ leg, seats, onPick }) {
   const [days, setDays] = useState([])
@@ -137,11 +327,42 @@ export default function Results() {
     ...(q.returnDate ? [{ origin: q.destination, destination: q.origin, date: q.returnDate }] : []),
   ]
   const [results, setResults] = useState(null)
+  const [suggestedByLeg, setSuggestedByLeg] = useState([])
   const [error, setError] = useState('')
   const [picked, setPicked] = useState([])
   const [expandedFlightIds, setExpandedFlightIds] = useState(new Set())
-  const [filter, setFilter] = useState({ airlines: [], cabin: '', maxPrice: '', dep: '', arr: '' })
+  const [filter, setFilter] = useState(DEFAULT_FILTER)
   const setF = (k) => (e) => setFilter({ ...filter, [k]: e.target.value })
+  const [sortBy, setSortBy] = useState('price')
+
+  // Ngăn kéo bộ lọc trên điện thoại (< 768px)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const drawerRef = useRef(null)
+  const filterBtnRef = useRef(null)
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (drawerOpen) {
+      wasOpen.current = true
+      const prevOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'          // khoá cuộn nền phía sau
+      drawerRef.current?.focus({ preventScroll: true })
+      const onKey = (e) => { if (e.key === 'Escape') setDrawerOpen(false) }
+      // Màn hình được nới rộng thành >= 768px thì đóng ngăn kéo để không kẹt khoá cuộn
+      const mq = window.matchMedia('(min-width: 768px)')
+      const onWide = (e) => { if (e.matches) setDrawerOpen(false) }
+      document.addEventListener('keydown', onKey)
+      mq.addEventListener('change', onWide)
+      return () => {
+        document.body.style.overflow = prevOverflow
+        document.removeEventListener('keydown', onKey)
+        mq.removeEventListener('change', onWide)
+      }
+    }
+    if (wasOpen.current) {                             // vừa đóng: trả focus về nút "Bộ lọc"
+      wasOpen.current = false
+      filterBtnRef.current?.focus()
+    }
+  }, [drawerOpen])
 
   const toggleExpand = (id) => {
     setExpandedFlightIds((prev) => {
@@ -153,17 +374,44 @@ export default function Results() {
   }
 
   useEffect(() => {
+    let cancelled = false
     setResults(null)
+    setSuggestedByLeg([])
     setPicked([])
-    Promise.all(legs.map((l) => api('/flights/search?' + new URLSearchParams({ ...l, passengers: seatsNeeded }))))
-      .then(setResults)
-      .catch((e) => setError(e.message))
+    Promise.all(
+      legs.map(async (l) => {
+        const rows = await api('/flights/search?' + new URLSearchParams({ ...l, passengers: seatsNeeded }))
+        if (rows.length > 0 || !l.date) return { rows, suggested: [] }
+        const cal = await api(
+          '/flights/fare-calendar?' +
+            new URLSearchParams({
+              origin: l.origin,
+              destination: l.destination,
+              date_from: shiftYMD(l.date, -7),
+              days: 15,
+              passengers: seatsNeeded,
+            })
+        ).catch(() => [])
+        return { rows, suggested: pickSuggestedDays(cal, l.date) }
+      })
+    )
+      .then((data) => {
+        if (cancelled) return
+        setSuggestedByLeg(data.map((d) => d.suggested))
+        setResults(data.map((d) => d.rows))
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [params.toString()]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) return <ErrorText>{error}</ErrorText>
-  if (!results) return <p>Đang tìm chuyến bay…</p>
 
-  const airlines = [...new Map(results.flat().map((r) => [r.airline_code, r.airline_name])).entries()]
+  const isLoading = !results
+  const airlines = results ? [...new Map(results.flat().map((r) => [r.airline_code, r.airline_name])).entries()] : []
   const visible = (rows) => groupFlights(rows.filter((r) =>
     (!filter.airlines.length || filter.airlines.includes(r.airline_code)) &&
     (!filter.cabin || r.cabin_class === filter.cabin) &&
@@ -176,48 +424,127 @@ export default function Results() {
     airlines: filter.airlines.includes(code) ? filter.airlines.filter((a) => a !== code) : [...filter.airlines, code],
   })
 
+  const changeLegDate = (legIndex, newDate) => {
+    setResults(null)
+    setPicked([])
+    setParams({ ...q, [legIndex === 0 ? 'date' : 'returnDate']: newDate })
+  }
+
   const proceed = () => {
     sessionStorage.setItem('selection', JSON.stringify({ legs: picked, adults, children, infants }))
     navigate('/booking')
   }
 
-  return (
-    <div className="grid gap-6 lg:grid-cols-4">
-      <aside className="card h-fit space-y-4">
-        <h2 className="font-semibold">Bộ lọc</h2>
-        <fieldset>
-          <legend className="label">Hãng bay</legend>
-          {airlines.map(([code, name]) => (
-            <label key={code} className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={filter.airlines.includes(code)} onChange={() => toggleAirline(code)} /> {name}
-            </label>
-          ))}
-        </fieldset>
-        <label className="block"><span className="label">Hạng vé</span>
-          <select className="input" value={filter.cabin} onChange={setF('cabin')}>
-            <option value="">Tất cả</option>
-            {Object.entries(CABIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </label>
-        <label className="block"><span className="label">Giá tối đa (₫)</span>
-          <input type="number" min={0} step={100000} className="input" value={filter.maxPrice} onChange={setF('maxPrice')} />
-        </label>
-        {[['dep', 'Giờ cất cánh'], ['arr', 'Giờ hạ cánh']].map(([k, label]) => (
-          <label key={k} className="block"><span className="label">{label}</span>
-            <select className="input" value={filter[k]} onChange={setF(k)}>
-              {Object.entries(SLOTS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+  // Danh sách hiển thị mỗi chặng = lọc trước, rồi sắp xếp (bản sao)
+  const filteredByLeg = results ? legs.map((_, i) => visible(results[i])) : legs.map(() => [])
+  const resultCount = filteredByLeg.reduce((n, fl) => n + fl.length, 0)
+  const activeFilterCount = (filter.airlines.length > 0) + !!filter.cabin + !!filter.maxPrice + !!filter.dep + !!filter.arr
+
+  // Các điều khiển lọc hiện có, dùng chung cho cột bên (>= 768px) và ngăn kéo (< 768px)
+  const filterControls = (
+    <>
+      <fieldset>
+        <legend className="label">Hãng bay</legend>
+        {airlines.map(([code, name]) => (
+          <label key={code} className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={filter.airlines.includes(code)} onChange={() => toggleAirline(code)} /> {name}
           </label>
         ))}
+      </fieldset>
+      <label className="block"><span className="label">Hạng vé</span>
+        <select className="input" value={filter.cabin} onChange={setF('cabin')}>
+          <option value="">Tất cả</option>
+          {Object.entries(CABIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </label>
+      <label className="block"><span className="label">Giá tối đa (₫)</span>
+        <input type="number" min={0} step={100000} className="input" value={filter.maxPrice} onChange={setF('maxPrice')} />
+      </label>
+      {[['dep', 'Giờ cất cánh'], ['arr', 'Giờ hạ cánh']].map(([k, label]) => (
+        <label key={k} className="block"><span className="label">{label}</span>
+          <select className="input" value={filter[k]} onChange={setF(k)}>
+            {Object.entries(SLOTS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </label>
+      ))}
+    </>
+  )
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-4">
+      <style>{SHIMMER_CSS}</style>
+      <aside className="card h-fit space-y-4 hidden md:block">
+        <h2 className="font-semibold">Bộ lọc</h2>
+        {filterControls}
       </aside>
 
+      {/* Ngăn kéo bộ lọc trên điện thoại: lớp phủ + bảng trượt từ trái */}
+      <div className="md:hidden">
+        <div
+          aria-hidden="true"
+          onClick={() => setDrawerOpen(false)}
+          className={`fixed inset-0 z-40 bg-[rgba(8,12,16,0.5)] transition-opacity duration-300 ${drawerOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        />
+        <div
+          ref={drawerRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="filter-drawer-title"
+          tabIndex={-1}
+          inert={!drawerOpen}
+          className={`fixed inset-y-0 left-0 z-50 flex w-[85%] max-w-sm flex-col bg-surface shadow-2xl outline-none transition-transform duration-300 ease-out ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        >
+          <div className="flex items-center justify-between border-b border-line px-5 py-4">
+            <h2 id="filter-drawer-title" className="text-lead font-semibold">Bộ lọc</h2>
+            <button type="button" aria-label="Đóng bộ lọc" onClick={() => setDrawerOpen(false)}
+              className="grid h-9 w-9 cursor-pointer place-items-center rounded-full text-muted hover:bg-ground hover:text-ink">
+              <span aria-hidden="true" className="text-xl leading-none">×</span>
+            </button>
+          </div>
+          <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {filterControls}
+          </div>
+          <div className="flex gap-3 border-t border-line px-5 py-4">
+            <button type="button" className="btn-outline h-10 flex-1" onClick={() => setFilter(DEFAULT_FILTER)}>
+              Xóa bộ lọc
+            </button>
+            <button type="button" className="btn flex-1" onClick={() => setDrawerOpen(false)}>
+              Xem {resultCount} chuyến
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-6 lg:col-span-3">
+        {/* Banner điểm đến (component của B, tự ẩn khi không có dữ liệu) */}
+        <DestinationBanner destination={q.destination} />
+
+        {/* Thanh công cụ: nút Bộ lọc (chỉ điện thoại) + sắp xếp */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <button ref={filterBtnRef} type="button" onClick={() => setDrawerOpen(true)}
+            aria-haspopup="dialog" aria-expanded={drawerOpen}
+            className="btn-outline md:hidden">
+            Bộ lọc{activeFilterCount > 0 && ` (${activeFilterCount})`}
+          </button>
+          <label className="ml-auto flex items-center gap-2">
+            <span className="whitespace-nowrap text-meta text-muted">Sắp xếp theo</span>
+            <select
+              className="input w-auto disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isLoading}
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+            >
+              {Object.entries(SORTS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </label>
+        </div>
+
         {legs.map((leg, i) => {
-          const flights = visible(results[i])
-          // Tính giá vé thấp nhất trong số các chuyến đang hiển thị ở chặng này
-          const minPriceInLeg = flights.length > 0
-            ? Math.min(...flights.map((fl) => Math.min(...fl.fares.map((fr) => Number(fr.price)))))
-            : Infinity
+          const filtered = filteredByLeg[i]
+          // "Rẻ nhất" tính trên danh sách đã lọc, không phụ thuộc cách sắp xếp
+          const minPriceInLeg = filtered.length > 0 ? Math.min(...filtered.map(minFare)) : Infinity
+          const flights = sortFlights(filtered, sortBy)
+          const hasUnfilteredFlights = !isLoading && (results[i]?.length ?? 0) > 0
 
           return (
             <section key={i} className="space-y-3">
@@ -225,10 +552,29 @@ export default function Results() {
                 {i === 0 ? 'Chiều đi' : 'Chiều về'}: {leg.origin} → {leg.destination} · {fmtDate(leg.date)}
               </h2>
               <FareStrip leg={leg} seats={seatsNeeded}
-                onPick={(d) => setParams({ ...q, [i === 0 ? 'date' : 'returnDate']: d })} />
-              {!flights.length && <p className="text-sm text-slate-500">Không có chuyến bay phù hợp.</p>}
+                onPick={(d) => changeLegDate(i, d)} />
 
-              {flights.map((f) => {
+              <div aria-busy={isLoading} className="space-y-3">
+                {isLoading && (
+                  <>
+                    <span className="sr-only">Đang tìm chuyến bay…</span>
+                    {Array.from({ length: 5 }, (_, idx) => (
+                      <FlightCardSkeleton key={idx} />
+                    ))}
+                  </>
+                )}
+
+                {!isLoading && !flights.length && (
+                  <EmptyFlightsState
+                    hasUnfilteredFlights={hasUnfilteredFlights}
+                    suggestedDays={suggestedByLeg[i] ?? []}
+                    onClearFilter={() => setFilter(DEFAULT_FILTER)}
+                    onPickDate={(d) => changeLegDate(i, d)}
+                    onChangeSearchDate={() => navigate('/')}
+                  />
+                )}
+
+                {!isLoading && flights.map((f) => {
                 const flightMinPrice = Math.min(...f.fares.map((fr) => Number(fr.price)))
                 const isCheapest = flightMinPrice === minPriceInLeg
                 const isExpanded = expandedFlightIds.has(f.flight_id)
@@ -449,6 +795,7 @@ export default function Results() {
                   </div>
                 )
               })}
+              </div>
             </section>
           )
         })}
