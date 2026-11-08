@@ -515,7 +515,7 @@ export default function Results() {
         </div>
       </div>
 
-      <div className="space-y-6 lg:col-span-3">
+      <div className="min-w-0 space-y-6 lg:col-span-3">
         {/* Banner điểm đến (component của B, tự ẩn khi không có dữ liệu) */}
         <DestinationBanner destination={q.destination} />
 
@@ -632,7 +632,7 @@ export default function Results() {
                       </div>
 
                       {/* Tầng 2: Giờ đi, thời lượng, giờ đến & Cụm Giá tiền + Nút Chi tiết */}
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+                      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4 pt-1">
                         {/* Lộ trình bay */}
                         <div className="flex items-center gap-4 sm:gap-7 min-w-0">
                           <div className="text-left shrink-0">
@@ -668,7 +668,7 @@ export default function Results() {
                         </div>
 
                         {/* Giá tiền nổi bật & Nút Chi tiết cùng trên 1 hàng */}
-                        <div className="flex items-center justify-between sm:justify-end gap-3 pt-3 sm:pt-0 border-t border-rule sm:border-t-0 shrink-0">
+                        <div className="flex items-center justify-between sm:ml-auto sm:justify-end gap-3 pt-3 sm:pt-0 border-t border-rule sm:border-t-0 shrink-0">
                           <div className="flex items-baseline gap-1.5 whitespace-nowrap shrink-0">
                             <span className="text-xs text-muted whitespace-nowrap">Giá từ</span>
                             <span className="text-xl sm:text-2xl font-bold text-brand-strong num leading-none whitespace-nowrap">
@@ -773,14 +773,14 @@ export default function Results() {
                                 </div>
 
                                 {/* Nút chọn hạng vé & số ghế trống */}
-                                <div className="mt-4 pt-3 border-t border-rule flex items-center justify-between gap-2">
+                                <div className="mt-4 pt-3 border-t border-rule flex flex-wrap items-center justify-between gap-2">
                                   <span className="text-meta text-muted">
                                     Còn <strong className="text-ink num">{fare.seats_available}</strong> ghế
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() => setPicked(Object.assign([...picked], { [i]: fare }))}
-                                    className={`btn h-8 px-4 text-xs font-semibold ${isSelected ? 'bg-brand-strong text-white' : 'btn-outline'
+                                    className={`btn ml-auto h-8 shrink-0 whitespace-nowrap px-4 text-xs font-semibold ${isSelected ? 'bg-brand-strong text-white' : 'btn-outline'
                                       }`}
                                   >
                                     {isSelected ? '✓ Đã chọn' : 'Chọn hạng vé'}
