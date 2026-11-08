@@ -124,7 +124,7 @@
   margin: 0;
 }
 .actions {
-  align-items: start;
+  align-items: stretch;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
@@ -147,7 +147,12 @@
   font-size: var(--text-meta);
   color: var(--color-muted);
 }
-.action button {
+.actionControls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
   margin-top: auto;
 }
 .dialog {
