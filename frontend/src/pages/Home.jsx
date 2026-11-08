@@ -75,7 +75,8 @@ export default function Home() {
   const destCity = trip && airportList.length ? cityOf(trip.destination) : ''
 
   return (
-    <div>
+    // --overlap: phần khung tìm kiếm đè lên đáy hero. Khung tìm kiếm, thẻ HAN→SGN và padding khẩu hiệu đều tính theo biến này
+    <div className="[--overlap:9rem] sm:[--overlap:11rem]">
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
       <section className="relative isolate overflow-hidden rounded-[28px] bg-[#0b3a5c] sm:rounded-[36px]"
         style={{ minHeight: '70vh' }}>
@@ -84,8 +85,11 @@ export default function Home() {
         {/* lớp phủ tối đảm bảo chữ luôn đọc được ở mọi màn hình */}
         <div className="absolute inset-0 -z-10 bg-[rgba(8,12,16,0.52)] md:bg-[linear-gradient(110deg,rgba(8,12,16,0.78)_0%,rgba(8,12,16,0.52)_50%,rgba(8,12,16,0.18)_100%)]" />
 
-        {/* Nội dung slogan – đặt giữa phía trên theo chiều dọc hero */}
-        <div className="flex min-h-[70vh] flex-col justify-center px-6 pb-44 pt-16 sm:px-12 sm:pb-52 sm:pt-20 lg:pb-60">
+        {/* Nội dung slogan – đặt giữa phía trên theo chiều dọc hero.
+            lg (1024–1279px): thẻ HAN→SGN nằm ngang hàng khẩu hiệu nên chừa thêm chỗ cho thẻ:
+            --overlap + 1.5rem (khe dưới thẻ) + 9rem (chiều cao thẻ) + 1.5rem (khe trên thẻ) = --overlap + 12rem.
+            Từ xl, thẻ nằm hẳn bên phải khẩu hiệu nên chỉ cần --overlap + 4rem như trước. */}
+        <div className="flex min-h-[70vh] flex-col justify-center px-6 pb-[calc(var(--overlap)+2rem)] pt-16 sm:px-12 sm:pt-20 lg:pb-[calc(var(--overlap)+12rem)] xl:pb-[calc(var(--overlap)+4rem)]">
           <h1 className="rise max-w-3xl text-[clamp(36px,5.8vw,68px)] font-bold leading-[1.06] tracking-tight text-white drop-shadow-md">
             <span className="sr-only">Cất cánh tới {destCity || 'mọi điểm đến'}</span>
             <span aria-hidden="true" className="block">Cất cánh tới</span>
@@ -106,7 +110,7 @@ export default function Home() {
       </section>
 
       {/* ── KHUNG TÌM KIẾM NỔI – đè lên mép dưới hero ──────────────────── */}
-      <div className="rise relative z-10 -mt-36 rounded-3xl border border-line bg-white p-5 shadow-2xl [animation-delay:200ms] sm:mx-8 sm:-mt-44 sm:p-7">
+      <div className="rise relative z-10 mt-[calc(var(--overlap)*-1)] rounded-3xl border border-line bg-white p-5 shadow-2xl [animation-delay:200ms] sm:mx-8 sm:p-7">
         <div role="group" aria-label="Chọn việc cần làm" className="segmented mb-6">
           {Object.entries(TABS).map(([k, [label, short]]) => (
             <button key={k} type="button" aria-pressed={tab === k} onClick={() => setParams(k === 'book' ? {} : { tab: k })}
@@ -174,7 +178,7 @@ const ARC = 'M 6 52 Q 80 -10 154 52'
 function TripPreview({ trip, cityOf }) {
   const people = Number(trip.adults) + Number(trip.children) + Number(trip.infants)
   return (
-    <div className="fade-in absolute bottom-36 right-8 hidden w-[440px] rounded-2xl bg-white p-5 text-ink [animation-delay:500ms] lg:block">
+    <div className="fade-in absolute bottom-[calc(var(--overlap)+1.5rem)] right-8 hidden w-[440px] rounded-2xl bg-white p-5 text-ink [animation-delay:500ms] lg:block">
       <div className="flex items-center justify-between text-meta text-muted">
         <span>{trip.trip === 'round' ? 'Khứ hồi' : 'Một chiều'}</span>
         <span>{trip.date ? fmtDate(trip.date) : ''} · {people} khách</span>
