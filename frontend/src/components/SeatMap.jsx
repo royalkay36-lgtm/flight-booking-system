@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, CABIN, money } from '../api.js'
+import { ErrorText } from '../ui.jsx'
+import { createSeatMapLoader } from './seatMapData.js'
 import { getSeedExitRows } from './seatMapLayout.js'
 import useSeatMapViewport, { MIN_ZOOM, MAX_ZOOM } from './useSeatMapViewport.js'
 import styles from './SeatMap.module.css'
@@ -7,19 +9,29 @@ import styles from './SeatMap.module.css'
 const SEAT_TYPE = { WINDOW: 'Cửa sổ', MIDDLE: 'Giữa', AISLE: 'Lối đi' }
 const ZONES = [styles.zone0, styles.zone1, styles.zone2, styles.zone3, styles.zone4]
 
-export default function SeatMap({ flightId, cabin, selected = [], onPick, refreshKey }) {
-  const [data, setData] = useState({ flightId: null, seats: [] })
+export default function SeatMap({ flightId, cabin, selected = [], onPick, refreshKey, onSeatsChange }) {
+  const [data, setData] = useState({ flightId: null, seats: [], loaded: false })
+  const [retry, setRetry] = useState(0)
+  const notify = useRef(onSeatsChange)
+  notify.current = onSeatsChange
   const seats = data.flightId === flightId ? data.seats : []
+  const loaded = data.flightId === flightId && data.loaded
+  const loading = !loaded && (data.flightId !== flightId || data.loading)
+  const error = data.flightId === flightId ? data.error : ''
 
   useEffect(() => {
+    const initial = data.flightId === flightId ? { seats: data.seats, loaded: data.loaded, error: data.error } : {}
+    const loader = createSeatMapLoader(() => api(`/flights/${flightId}/seats`), state => {
+      setData({ flightId, ...state })
+    }, initial)
     let cancelled = false
-    const load = () => api(`/flights/${flightId}/seats`).then(seats => {
-      if (!cancelled) setData({ flightId, seats })
-    }).catch(() => {})
+    const load = () => loader.load().then(rows => {
+      if (!cancelled && rows) notify.current?.(rows, { flightId, refreshKey })
+    })
     load()
     const timer = setInterval(load, 10000)
-    return () => { cancelled = true; clearInterval(timer) }
-  }, [flightId, refreshKey])
+    return () => { cancelled = true; loader.stop(); clearInterval(timer) }
+  }, [flightId, refreshKey, retry]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fees = [...new Set(seats.filter(s => s.cabin_class === cabin).map(s => Number(s.seat_fee)))].sort((a, b) => a - b)
   const exitRows = getSeedExitRows(seats)
@@ -41,6 +53,16 @@ export default function SeatMap({ flightId, cabin, selected = [], onPick, refres
         <button type="button" className="btn-outline" onClick={view.reset}>Đặt lại</button>
       </div>
       <p className={styles.hint}>Kéo để xem sơ đồ, chụm hai ngón để thu phóng. Cuộn trang ở bên ngoài khung.</p>
+      {error && <div className={styles.notice}>
+        <ErrorText>{error}</ErrorText>
+        {seats.length > 0 && <p className={styles.hint}>Đang hiển thị dữ liệu gần nhất. Hãy tải lại trước khi chọn ghế.</p>}
+        <button type="button" className="btn-outline mt-2" disabled={data.refreshing} onClick={() => setRetry(value => value + 1)}>Thử tải lại sơ đồ ghế</button>
+      </div>}
+      {loading && <p role="status" className={styles.notice}>Đang tải sơ đồ ghế…</p>}
+      {loaded && !seats.length && !error && <div className={styles.notice}>
+        <p role="status">Chuyến bay hiện chưa có dữ liệu sơ đồ ghế. Bạn có thể để hệ thống xếp ghế khi làm thủ tục.</p>
+        <button type="button" className="btn-outline mt-2" onClick={() => setRetry(value => value + 1)}>Tải lại sơ đồ ghế</button>
+      </div>}
       <div ref={view.viewportRef} className={styles.viewport} tabIndex={0} role="region" aria-label="Khung xem sơ đồ ghế"
         {...view.handlers} onDragStart={event => event.preventDefault()}>
         <div className={styles.canvas} style={view.canvasStyle}>
@@ -75,7 +97,7 @@ export default function SeatMap({ flightId, cabin, selected = [], onPick, refres
                           {Array.from({ length: cols }, (_, i) => {
                             const seat = at.get(`${row}-${i + 1}`)
                             return seat ? <Seat key={seat.flight_seat_id} seat={seat} index={selected.indexOf(seat.flight_seat_id)}
-                              enabled={c === cabin} zone={fees.indexOf(Number(seat.seat_fee))} onPick={onPick} /> : <span key={`aisle-${i}`} aria-hidden="true" />
+                              enabled={c === cabin} blocked={!!error} zone={fees.indexOf(Number(seat.seat_fee))} onPick={onPick} /> : <span key={`aisle-${i}`} aria-hidden="true" />
                           })}
                         </div>
                       </div>
@@ -83,7 +105,6 @@ export default function SeatMap({ flightId, cabin, selected = [], onPick, refres
                   </section>
                 )
               })}
-              {!seats.length && <p className={styles.hint} role="status">Đang tải sơ đồ ghế…</p>}
               <div className={styles.tail}>Đuôi máy bay</div>
             </div>
           </div>
@@ -104,14 +125,14 @@ export default function SeatMap({ flightId, cabin, selected = [], onPick, refres
   )
 }
 
-function Seat({ seat, index, enabled, zone, onPick }) {
+function Seat({ seat, index, enabled, blocked, zone, onPick }) {
   const chosen = index >= 0
   const free = seat.status === 'AVAILABLE' || seat.mine
   const fee = Number(seat.seat_fee) ? money(seat.seat_fee) : 'miễn phí'
-  const status = chosen ? `đã chọn cho khách ${index + 1}` : !free ? 'đã có người giữ, đặt hoặc khóa' : !enabled ? 'khác khoang' : 'còn trống'
-  const stateClass = chosen ? styles.seatSelected : !free ? styles.seatUnavailable : !enabled ? styles.seatOther : ZONES[Math.min(zone, ZONES.length - 1)]
+  const status = chosen ? `đã chọn cho khách ${index + 1}` : blocked ? 'chưa xác minh tình trạng ghế' : !free ? 'đã có người giữ, đặt hoặc khóa' : !enabled ? 'khác khoang' : 'còn trống'
+  const stateClass = chosen ? styles.seatSelected : !free ? styles.seatUnavailable : !enabled || blocked ? styles.seatOther : ZONES[Math.min(zone, ZONES.length - 1)]
   return (
-    <button type="button" disabled={!enabled || !free || chosen} onClick={() => onPick(seat)} aria-pressed={chosen}
+    <button type="button" disabled={!enabled || !free || chosen || blocked} onClick={() => onPick(seat)} aria-pressed={chosen}
       title={`Ghế ${seat.seat_code} · ${SEAT_TYPE[seat.seat_type]} · ${fee} · ${status}`}
       aria-label={`Ghế ${seat.seat_code}, ${SEAT_TYPE[seat.seat_type]}, ${fee}, ${status}`}
       className={`${styles.seat} ${stateClass}`}>

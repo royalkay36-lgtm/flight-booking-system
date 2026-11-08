@@ -32,6 +32,10 @@
 .toolbar button {
   min-height: 44px;
 }
+.notice {
+  margin: 0.75rem 0;
+  font-size: var(--text-ui);
+}
 .zoomLabel {
   min-width: 4rem;
   text-align: center;

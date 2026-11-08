@@ -1,0 +1,5 @@
+PostgreSQL 18.6
+............                                                             [100%]
+12 passed in 3.54s
+PYTEST_EXIT=0
+Temporary review database removed.
