@@ -497,7 +497,7 @@ export default function Results() {
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <h2 id="filter-drawer-title" className="text-lead font-semibold">Bộ lọc</h2>
             <button type="button" aria-label="Đóng bộ lọc" onClick={() => setDrawerOpen(false)}
-              className="grid h-9 w-9 cursor-pointer place-items-center rounded-full text-muted hover:bg-ground hover:text-ink">
+              className="-m-1 grid h-11 w-11 cursor-pointer place-items-center rounded-full text-muted hover:bg-ground hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
               <span aria-hidden="true" className="text-xl leading-none">×</span>
             </button>
           </div>
