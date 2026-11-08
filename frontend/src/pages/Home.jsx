@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { api, fmtDate, isoDate } from '../api.js'
 import { ErrorText, FlapText, PlaneMark } from '../ui.jsx'
+import DestinationCards from '../components/DestinationCards.jsx'
 
 // Dữ liệu sân bay mặc định (dữ liệu tạm khi máy chủ chưa phản hồi)
 const DEFAULT_AIRPORTS = [
@@ -140,6 +141,9 @@ export default function Home() {
         <div hidden={tab !== 'book'}><SearchForm airports={airportList} error={airportsError} onChange={setTrip} /></div>
         {tab !== 'book' && <LookupForm key={tab} checkin={tab === 'checkin'} />}
       </div>
+
+      {/* 1. Điểm đến (component của B, đã có sẵn tiêu đề và tự ẩn khi API lỗi) */}
+      <DestinationCards />
 
       {/* 2. Vì sao chọn SkyBooking */}
       <section className="mt-24" aria-labelledby="why-title">
