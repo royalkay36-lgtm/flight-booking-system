@@ -1,96 +1,263 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useMatch } from 'react-router'
 import { api, fmtDate, fmtTime, isoDate, money } from '../api.js'
+import styles from './ChatWidget.module.css'
 
 const WELCOME = {
   from: 'bot',
-  reply: 'Xin chào! Mình là trợ lý ảo SkyBooking. Bạn có thể hỏi tìm chuyến bay bằng câu tự nhiên, hành lý, hoàn đổi vé, khuyến mãi…',
-  suggestions: ['Tìm chuyến Hà Nội đi Đà Nẵng sáng thứ 7 tuần sau dưới 1 triệu', 'Hành lý ký gửi bao nhiêu kg?',
-    'Chính sách hoàn huỷ vé', 'Có mã khuyến mãi nào không?'],
+  reply: 'Xin chào! Mình là trợ lý SkyBooking. Bạn muốn tìm chuyến bay hay hỏi về vé của mình?',
+  suggestions: [
+    'Hà Nội đi Đà Nẵng ngày mai',
+    'Hỏi về hành lý',
+    'Chính sách hoàn hủy vé',
+    'Làm thủ tục trực tuyến',
+  ],
 }
 
 export default function ChatWidget() {
   const { pathname } = useLocation()
-  const panelPosition = pathname === '/booking' ? 'bottom-[calc(6rem+env(safe-area-inset-bottom))] max-h-[calc(100dvh-8rem-env(safe-area-inset-bottom))] lg:bottom-5' : 'bottom-5'
+  const bookingDetail = useMatch('/bookings/:pnr')
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([WELCOME])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
-  const end = useRef(null)
-  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, open])
-  // Menu điện thoại và footer mở chat bằng openChat() trong ui.jsx
-  useEffect(() => {
-    const show = () => setOpen(true)
-    window.addEventListener('open-chat', show)
-    return () => window.removeEventListener('open-chat', show)
+  const pending = useRef(false)
+  const widget = useRef(null)
+  const launcher = useRef(null)
+  const closeButton = useRef(null)
+  const opener = useRef(null)
+  const restoreFocus = useRef(false)
+  const log = useRef(null)
+
+  const show = useCallback(() => {
+    if (closeButton.current) {
+      closeButton.current.focus({ preventScroll: true })
+      return
+    }
+    opener.current = document.activeElement
+    setOpen(true)
   }, [])
 
-  const send = async (text) => {
-    if (!text.trim() || busy) return
+  function close() {
+    restoreFocus.current = true
+    setOpen(false)
+  }
+
+  useEffect(() => {
+    window.addEventListener('open-chat', show)
+    return () => window.removeEventListener('open-chat', show)
+  }, [show])
+
+  useEffect(() => {
+    if (open) {
+      // Focus a button first so opening chat does not bring up the phone keyboard.
+      closeButton.current?.focus({ preventScroll: true })
+    } else if (restoreFocus.current) {
+      restoreFocus.current = false
+      const target = opener.current?.isConnected && opener.current !== document.body
+        ? opener.current
+        : launcher.current
+      target?.focus({ preventScroll: true })
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (log.current) log.current.scrollTop = log.current.scrollHeight
+  }, [messages, busy, open])
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    if (!viewport) return
+
+    function updateViewport() {
+      const element = widget.current
+      if (!element) return
+      const bottomInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+      element.style.setProperty('--chat-visible-height', `${viewport.height}px`)
+      element.style.setProperty('--chat-keyboard-inset', `${bottomInset}px`)
+    }
+
+    updateViewport()
+    viewport.addEventListener('resize', updateViewport)
+    viewport.addEventListener('scroll', updateViewport)
+    window.addEventListener('resize', updateViewport)
+    return () => {
+      viewport.removeEventListener('resize', updateViewport)
+      viewport.removeEventListener('scroll', updateViewport)
+      window.removeEventListener('resize', updateViewport)
+    }
+  }, [])
+
+  async function send(text) {
+    const question = text.trim()
+    if (!question || pending.current) return
+    pending.current = true
     setInput('')
-    setMessages((m) => [...m, { from: 'me', reply: text }])
     setBusy(true)
+    setMessages((previous) => [...previous, { from: 'me', reply: question }])
     try {
-      const answer = await api('/chat', { method: 'POST', body: { message: text } })
-      setMessages((m) => [...m, { from: 'bot', ...answer }])
-    } catch (e) {
-      setMessages((m) => [...m, { from: 'bot', reply: `Xin lỗi, có lỗi xảy ra: ${e.message}` }])
+      const answer = await api('/chat', { method: 'POST', body: { message: question } })
+      setMessages((previous) => [...previous, { from: 'bot', ...answer }])
+    } catch (error) {
+      setMessages((previous) => [
+        ...previous,
+        { from: 'bot', reply: `Xin lỗi, có lỗi xảy ra: ${error.message}` },
+      ])
     } finally {
+      pending.current = false
       setBusy(false)
     }
   }
 
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} aria-label="Mở trợ lý ảo"
-        className="rise [animation-delay:800ms] fixed bottom-5 right-5 z-40 hidden h-14 w-14 lg:flex items-center justify-center rounded-full bg-brand-strong text-white shadow-lg hover:bg-brand-ink">
-        <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
-          <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-        </svg>
-      </button>
-    )
-  }
-
   return (
-    <section aria-label="Trợ lý ảo" className={`pop-in [transform-origin:bottom_right] fixed ${panelPosition} right-5 z-40 flex h-[32rem] w-[22rem] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl`}>
-      <header className="flex items-center bg-sky-600 px-4 py-3 text-white">
-        <b className="mr-auto">Trợ lý ảo SkyBooking</b>
-        <button onClick={() => setOpen(false)} aria-label="Đóng trợ lý ảo" className="grid h-8 w-8 place-items-center rounded-full hover:bg-white/15"><svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg></button>
-      </header>
-      <div className="flex-1 space-y-3 overflow-y-auto p-3 text-sm" aria-live="polite">
-        {messages.map((m, i) => (
-          <div key={i} className={m.from === 'me' ? 'flex justify-end' : ''}>
-            <div className={`max-w-[85%] whitespace-pre-line rounded-2xl px-3 py-2 ${m.from === 'me' ? 'bg-sky-600 text-white' : 'bg-slate-100'}`}>
-              {m.reply}
-              {m.flights?.map((f) => (
-                <Link key={`${f.flight_id}-${f.fare_class}`} onClick={() => setOpen(false)}
-                  to={`/search?${new URLSearchParams({ origin: f.origin, destination: f.destination, date: isoDate(new Date(f.departure_time)) })}`}
-                  className="mt-2 block rounded-lg border border-slate-200 bg-white p-2 hover:border-sky-400">
-                  <div className="font-medium">{f.flight_number} · {fmtTime(f.departure_time)} {fmtDate(f.departure_time)}</div>
-                  <div className="text-xs text-slate-500">{f.airline_name} · {f.fare_name} · <b className="text-sky-700">{money(f.price)}</b></div>
-                </Link>
-              ))}
-              {m.link && (
-                <Link to={m.link.url} onClick={() => setOpen(false)} className="mt-2 block font-medium text-sky-700 underline">{m.link.label} →</Link>
-              )}
-            </div>
-            {m.suggestions && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {m.suggestions.map((s) => (
-                  <button key={s} onClick={() => send(s)} className="rounded-full border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-50">{s}</button>
-                ))}
+    <div
+      className={styles.widget}
+      ref={widget}
+      data-booking={pathname === '/booking' || undefined}
+      data-booking-detail={!!bookingDetail || undefined}
+    >
+      {!open ? (
+        <button
+          type="button"
+          ref={launcher}
+          className={styles.launcher}
+          aria-label="Mở trợ lý ảo"
+          aria-expanded={false}
+          onClick={show}
+        >
+          <AssistantMark />
+        </button>
+      ) : (
+        <section
+          aria-label="Trợ lý ảo SkyBooking"
+          className={styles.panel}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+              event.preventDefault()
+              close()
+            }
+          }}
+        >
+          <header className={styles.header}>
+            <Avatar />
+            <h2 className="font-semibold">Trợ lý ảo SkyBooking</h2>
+            <button
+              type="button"
+              ref={closeButton}
+              className={styles.close}
+              aria-label="Đóng trợ lý ảo"
+              onClick={close}
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          </header>
+
+          <div className={styles.log} ref={log} role="log" aria-label="Hội thoại" tabIndex={0}>
+            {messages.map((message, index) => (
+              <Message
+                key={index}
+                message={message}
+                busy={busy}
+                onSuggest={send}
+                onNavigate={() => setOpen(false)}
+              />
+            ))}
+            {busy && (
+              <div className={styles.assistantRow}>
+                <Avatar />
+                <div className={`${styles.bubble} ${styles.typing}`}>
+                  <span>Đang gõ…</span>
+                  <span aria-hidden="true"><i /><i /><i /></span>
+                </div>
               </div>
             )}
           </div>
-        ))}
-        {busy && <p className="text-slate-400">Đang trả lời…</p>}
-        <div ref={end} />
+
+          <form
+            className={styles.composer}
+            onSubmit={(event) => {
+              event.preventDefault()
+              send(input)
+            }}
+          >
+            <input
+              className="input"
+              aria-label="Câu hỏi cho trợ lý ảo"
+              placeholder="Nhập câu hỏi…"
+              maxLength={500}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+            />
+            <button className="btn" disabled={busy || !input.trim()}>Gửi</button>
+          </form>
+        </section>
+      )}
+    </div>
+  )
+}
+
+function Message({ message, busy, onSuggest, onNavigate }) {
+  const isCustomer = message.from === 'me'
+
+  return (
+    <div className={isCustomer ? styles.customerRow : styles.assistantRow}>
+      {!isCustomer && <Avatar />}
+      <div className={styles.message}>
+        <div className={`${styles.bubble}${isCustomer ? ` ${styles.customerBubble}` : ''}`}>
+          <span className="sr-only">{isCustomer ? 'Bạn: ' : 'Trợ lý: '}</span>
+          {message.reply}
+          {message.flights?.map((flight) => (
+            <Link
+              key={`${flight.flight_id}-${flight.fare_class}`}
+              onClick={onNavigate}
+              to={`/search?${new URLSearchParams({
+                origin: flight.origin,
+                destination: flight.destination,
+                date: isoDate(new Date(flight.departure_time)),
+              })}`}
+              className={styles.flight}
+            >
+              <div className="font-medium">{flight.flight_number} · {fmtTime(flight.departure_time)} {fmtDate(flight.departure_time)}</div>
+              <div className="text-meta text-muted">{flight.airline_name} · {flight.fare_name} · <b className="text-brand-ink">{money(flight.price)}</b></div>
+            </Link>
+          ))}
+          {message.link && (
+            <Link to={message.link.url} onClick={onNavigate} className="mt-2 block font-medium text-brand-ink underline">
+              {message.link.label} →
+            </Link>
+          )}
+        </div>
+        {message.suggestions?.length > 0 && (
+          <div className={styles.suggestions} role="group" aria-label="Câu hỏi gợi ý">
+            {message.suggestions.map((suggestion) => (
+              <button
+                type="button"
+                key={suggestion}
+                disabled={busy}
+                onClick={() => onSuggest(suggestion)}
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      <form onSubmit={(e) => { e.preventDefault(); send(input) }} className="flex gap-2 border-t border-slate-100 p-2">
-        <input className="input" aria-label="Câu hỏi cho trợ lý ảo" placeholder="Nhập câu hỏi…" maxLength={500}
-          value={input} onChange={(e) => setInput(e.target.value)} />
-        <button className="btn" disabled={busy || !input.trim()}>Gửi</button>
-      </form>
-    </section>
+    </div>
+  )
+}
+
+function Avatar() {
+  return <span className={styles.avatar}><AssistantMark /></span>
+}
+
+function AssistantMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 6V3m-2 0h4M4 11H2m20 0h-2" />
+      <rect x="4" y="6" width="16" height="13" rx="4" />
+      <path d="M8.5 11h.1m6.8 0h.1M10 15c1.2 1 2.8 1 4 0" />
+    </svg>
   )
 }

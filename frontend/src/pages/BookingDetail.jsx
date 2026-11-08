@@ -2,7 +2,7 @@ import QRCode from 'qrcode'
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { api, BOOKING_STATUS, duration, fmtDate, fmtDateTime, fmtTime, FLIGHT_STATUS, isoDate, money, PAX, TICKET_STATUS } from '../api.js'
-import { Badge, ErrorText, useAuth } from '../ui.jsx'
+import { Badge, ErrorText, openChat, useAuth } from '../ui.jsx'
 
 const METHODS = { VNPAY: 'VNPAY', MOMO: 'Ví MoMo', ZALOPAY: 'ZaloPay', CARD: 'Thẻ quốc tế' }
 
@@ -65,6 +65,9 @@ export default function BookingDetail() {
           <span className="font-mono text-3xl font-bold tracking-widest">{booking.pnr}</span>
         </div>
         <Badge map={BOOKING_STATUS} value={booking.status} />
+        <button type="button" className="btn-outline min-h-11 lg:hidden" onClick={openChat}>
+          Hỏi trợ lý về đặt chỗ
+        </button>
         <div className="text-sm text-slate-500">{booking.contact_email} · {booking.contact_phone}</div>
         <div className="ml-auto text-right">
           <span className="label">Tổng tiền{Number(booking.discount_amount) > 0 && ` (đã giảm ${money(booking.discount_amount)} – ${booking.voucher_code})`}</span>
