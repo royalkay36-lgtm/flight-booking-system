@@ -13,22 +13,36 @@ FROM (VALUES ('admin@flight.test', 'Quản trị viên',     '0900000001', 'ADMI
              ('khach@flight.test', 'Nguyễn Văn An',     '0900000003', 'PASSENGER')) AS v (email, full_name, phone, role);
 
 -- Sân bay (toạ độ, mã ICAO theo OpenFlights; tên thành phố tiếng Việt cho chatbot/tìm kiếm)
-INSERT INTO airports (iata_code, icao_code, name, city, country, latitude, longitude, timezone) VALUES
-    ('HAN', 'VVNB', 'Noi Bai International Airport',      'Hà Nội',          'Vietnam',     21.221201, 105.806999, 'Asia/Ho_Chi_Minh'),
-    ('SGN', 'VVTS', 'Tan Son Nhat International Airport', 'TP. Hồ Chí Minh', 'Vietnam',     10.818800, 106.652000, 'Asia/Ho_Chi_Minh'),
-    ('DAD', 'VVDN', 'Da Nang International Airport',      'Đà Nẵng',         'Vietnam',     16.043900, 108.199000, 'Asia/Ho_Chi_Minh'),
-    ('CXR', 'VVCR', 'Cam Ranh International Airport',     'Nha Trang',       'Vietnam',     11.998200, 109.219000, 'Asia/Ho_Chi_Minh'),
-    ('PQC', 'VVPQ', 'Phu Quoc International Airport',     'Phú Quốc',        'Vietnam',     10.169800, 103.993100, 'Asia/Ho_Chi_Minh'),
-    ('HPH', 'VVCI', 'Cat Bi International Airport',       'Hải Phòng',       'Vietnam',     20.819400, 106.725000, 'Asia/Ho_Chi_Minh'),
-    ('VII', 'VVVH', 'Vinh International Airport',         'Vinh',            'Vietnam',     18.737600, 105.671000, 'Asia/Ho_Chi_Minh'),
-    ('HUI', 'VVPB', 'Phu Bai International Airport',      'Huế',             'Vietnam',     16.401500, 107.703000, 'Asia/Ho_Chi_Minh'),
-    ('DLI', 'VVDL', 'Lien Khuong Airport',                'Đà Lạt',          'Vietnam',     11.750000, 108.367000, 'Asia/Ho_Chi_Minh'),
-    ('VCA', 'VVCT', 'Can Tho International Airport',      'Cần Thơ',         'Vietnam',     10.085100, 105.712000, 'Asia/Ho_Chi_Minh'),
-    ('BKK', 'VTBS', 'Suvarnabhumi Airport',               'Bangkok',         'Thailand',    13.681100, 100.747000, 'Asia/Bangkok'),
-    ('SIN', 'WSSS', 'Singapore Changi Airport',           'Singapore',       'Singapore',    1.350190, 103.994000, 'Asia/Singapore'),
-    ('ICN', 'RKSI', 'Incheon International Airport',      'Seoul',           'South Korea', 37.469100, 126.451000, 'Asia/Seoul'),
-    ('NRT', 'RJAA', 'Narita International Airport',       'Tokyo',           'Japan',       35.764700, 140.386000, 'Asia/Tokyo');
-
+INSERT INTO airports (iata_code, icao_code, name, city, country, latitude, longitude, timezone, image_url, description, is_featured) VALUES
+    ('HAN', 'VVNB', 'Noi Bai International Airport',      'Hà Nội',          'Vietnam',     21.221201, 105.806999, 'Asia/Ho_Chi_Minh',
+     '/images/destinations/HAN.jpg', 'Thủ đô nghìn năm văn hiến với phố cổ rêu phong và nền ẩm thực tinh tế.', false),
+    ('SGN', 'VVTS', 'Tan Son Nhat International Airport', 'TP. Hồ Chí Minh', 'Vietnam',     10.818800, 106.652000, 'Asia/Ho_Chi_Minh',
+     '/images/destinations/SGN.jpg', 'Trung tâm kinh tế năng động, sầm uất bậc nhất với nhịp sống hiện đại không ngủ.', false),
+    ('DAD', 'VVDN', 'Da Nang International Airport',      'Đà Nẵng',         'Vietnam',     16.043900, 108.199000, 'Asia/Ho_Chi_Minh',
+     '/images/destinations/DAD.jpg', 'Thành phố đáng sống với bãi biển Mỹ Khê tuyệt đẹp và Cầu Vàng Bà Nà Hills kỳ vĩ.', true),
+    ('CXR', 'VVCR', 'Cam Ranh International Airport',     'Nha Trang',       'Vietnam',     11.998200, 109.219000, 'Asia/Ho_Chi_Minh',
+     '/images/destinations/CXR.jpg', 'Thiên đường biển đảo nhiệt đới với bờ cát trắng mịn và nhiều khu nghỉ dưỡng cao cấp.', true),
+    ('PQC', 'VVPQ', 'Phu Quoc International Airport',     'Phú Quốc',        'Vietnam',     10.169800, 103.993100, 'Asia/Ho_Chi_Minh',
+     '/images/destinations/PQC.jpg', 'Đảo ngọc hoang sơ với làn nước trong vắt, hoàng hôn tuyệt đẹp và hải sản tươi ngon.', true),
+    ('HPH', 'VVCI', 'Cat Bi International Airport',       'Hải Phòng',       'Vietnam',     20.819400, 106.725000, 'Asia/Ho_Chi_Minh',
+     '/images/destinations/HPH.jpg', 'Thành phố Hoa Phượng Đỏ, cửa ngõ khám phá vịnh Lan Hạ và quần đảo Cát Bà xanh ngát.', false),
+    ('VII', 'VVVH', 'Vinh International Airport',         'Vinh',            'Vietnam',     18.737600, 105.671000, 'Asia/Ho_Chi_Minh',
+     '/images/destinations/VII.jpg', 'Vùng đất địa linh nhân kiệt, nổi tiếng với bãi biển Cửa Lò và làng Sen quê Bác.', false),
+    ('HUI', 'VVPB', 'Phu Bai International Airport',      'Huế',             'Vietnam',     16.401500, 107.703000, 'Asia/Ho_Chi_Minh',
+     '/images/destinations/HUI.jpg', 'Cố đô trầm mặc bên dòng sông Hương thơ mộng, lưu giữ di sản cung đình vàng son.', false),
+    ('DLI', 'VVDL', 'Lien Khuong Airport',                'Đà Lạt',          'Vietnam',     11.750000, 108.367000, 'Asia/Ho_Chi_Minh',
+     '/images/destinations/DLI.jpg', 'Thành phố ngàn hoa xứ sở sương mù với không khí se lạnh lãng mạn quanh năm.', true),
+    ('VCA', 'VVCT', 'Can Tho International Airport',      'Cần Thơ',         'Vietnam',     10.085100, 105.712000, 'Asia/Ho_Chi_Minh',
+     '/images/destinations/VCA.jpg', 'Thủ phủ miền Tây sông nước trù phú với nét văn hóa chợ nổi Cái Răng độc đáo.', false),
+    ('BKK', 'VTBS', 'Suvarnabhumi Airport',               'Bangkok',         'Thailand',    13.681100, 100.747000, 'Asia/Bangkok',
+     '/images/destinations/BKK.jpg', 'Thủ đô xứ chùa Vàng rực rỡ với các khu chợ đêm sôi động và ẩm thực đường phố phong phú.', true),
+    ('SIN', 'WSSS', 'Singapore Changi Airport',           'Singapore',       'Singapore',    1.350190, 103.994000, 'Asia/Singapore',
+     '/images/destinations/SIN.jpg', 'Quốc đảo sư tử xanh - sạch - đẹp, nơi hội tụ kiến trúc tương lai và giải trí đẳng cấp.', false),
+    ('ICN', 'RKSI', 'Incheon International Airport',      'Seoul',           'South Korea', 37.469100, 126.451000, 'Asia/Seoul',
+     '/images/destinations/ICN.jpg', 'Kinh đô thời trang và văn hóa K-Pop giao thoa hài hòa giữa hoàng cung xưa và nhịp sống số.', false),
+    ('NRT', 'RJAA', 'Narita International Airport',       'Tokyo',           'Japan',       35.764700, 140.386000, 'Asia/Tokyo',
+     '/images/destinations/NRT.jpg', 'Đại đô thị hiện đại bậc nhất thế giới với nền văn hóa đặc sắc và núi Phú Sĩ hùng vĩ.', true);
+     
 INSERT INTO airlines (iata_code, name) VALUES
     ('VN', 'Vietnam Airlines'),
     ('VJ', 'Vietjet Air'),
