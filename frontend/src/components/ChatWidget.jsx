@@ -5,20 +5,39 @@ import styles from './ChatWidget.module.css'
 
 const WELCOME = {
   from: 'bot',
+  welcome: true,
   reply: 'Xin chào! Mình là trợ lý SkyBooking. Bạn muốn tìm chuyến bay hay hỏi về vé của mình?',
-  suggestions: [
-    'Hà Nội đi Đà Nẵng ngày mai',
-    'Hỏi về hành lý',
-    'Chính sách hoàn hủy vé',
-    'Làm thủ tục trực tuyến',
-  ],
+}
+
+// Gợi ý mở đầu theo trang khách đang xem
+function welcomeSuggestions(pathname) {
+  if (pathname === '/search') return ['Ngày mai thì sao?', 'Hành lý ký gửi bao nhiêu kg?', 'Đổi vé có mất phí không?']
+  if (pathname === '/booking') return ['Phí chọn ghế bao nhiêu?', 'Hành lý ký gửi bao nhiêu kg?', 'Có mã khuyến mãi nào không?']
+  if (pathname.startsWith('/bookings/')) return ['Đổi chuyến có mất phí không?', 'Chính sách hoàn huỷ vé', 'Khi nào làm thủ tục được?']
+  return ['Hà Nội đi Đà Nẵng ngày mai', 'Hỏi về hành lý', 'Chính sách hoàn hủy vé', 'Làm thủ tục trực tuyến']
+}
+
+// Trên trang kết quả, tuyến đang xem là ngữ cảnh để hỏi tiếp ("ngày mai thì sao?")
+function searchContext(search) {
+  const p = new URLSearchParams(search)
+  if (!p.get('origin') || !p.get('destination')) return null
+  const passengers = Number(p.get('adults') || 1) + Number(p.get('children') || 0)
+  return { origin: p.get('origin'), destination: p.get('destination'), date: p.get('date') || null, passengers: Math.min(9, passengers) }
+}
+
+// Hội thoại giữ lại khi tải lại trang (chỉ trong tab này)
+const STORE = 'skybooking-chat'
+function loadChat() {
+  try { return JSON.parse(sessionStorage.getItem(STORE)) } catch { return null }
 }
 
 export default function ChatWidget() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const bookingDetail = useMatch('/bookings/:pnr')
+  const saved = useRef(loadChat())
   const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState([WELCOME])
+  const [messages, setMessages] = useState(() => saved.current?.messages ?? [WELCOME])
+  const context = useRef(saved.current?.context ?? null)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const pending = useRef(false)
@@ -66,6 +85,16 @@ export default function ChatWidget() {
   }, [messages, busy, open])
 
   useEffect(() => {
+    if (pathname === '/search') context.current = searchContext(search) ?? context.current
+  }, [pathname, search])
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORE, JSON.stringify({ messages: messages.slice(-30), context: context.current }))
+    } catch { /* trình duyệt chặn lưu trữ: hội thoại chỉ mất khi tải lại trang */ }
+  }, [messages])
+
+  useEffect(() => {
     const viewport = window.visualViewport
     if (!viewport) return
 
@@ -95,13 +124,19 @@ export default function ChatWidget() {
     setInput('')
     setBusy(true)
     setMessages((previous) => [...previous, { from: 'me', reply: question }])
+    // Các lượt trước gửi kèm để trợ lý AI hiểu câu hỏi nối tiếp; máy chủ không lưu hội thoại
+    const history = messages
+      .filter((m) => !m.welcome && !m.failed && m.reply)
+      .slice(-10)
+      .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.reply.slice(0, 2000) }))
     try {
-      const answer = await api('/chat', { method: 'POST', body: { message: question } })
+      const answer = await api('/chat', { method: 'POST', body: { message: question, context: context.current, history } })
+      if (answer.context) context.current = answer.context // câu hỏi chính sách không xoá tuyến đang hỏi
       setMessages((previous) => [...previous, { from: 'bot', ...answer }])
     } catch (error) {
       setMessages((previous) => [
         ...previous,
-        { from: 'bot', reply: `Xin lỗi, có lỗi xảy ra: ${error.message}` },
+        { from: 'bot', failed: true, reply: `Xin lỗi, có lỗi xảy ra: ${error.message}` },
       ])
     } finally {
       pending.current = false
@@ -158,7 +193,8 @@ export default function ChatWidget() {
             {messages.map((message, index) => (
               <Message
                 key={index}
-                message={message}
+                message={index < messages.length - 1 ? { ...message, suggestions: null } // gợi ý chỉ hiện ở tin mới nhất
+                  : message.welcome ? { ...message, suggestions: welcomeSuggestions(pathname) } : message}
                 busy={busy}
                 onSuggest={send}
                 onNavigate={() => setOpen(false)}
@@ -229,6 +265,7 @@ function Message({ message, busy, onSuggest, onNavigate }) {
             </Link>
           )}
         </div>
+        {message.source === 'ai' && <p className="mt-1 text-meta text-muted">Trả lời bằng AI, có thể chưa chính xác.</p>}
         {message.suggestions?.length > 0 && (
           <div className={styles.suggestions} role="group" aria-label="Câu hỏi gợi ý">
             {message.suggestions.map((suggestion) => (

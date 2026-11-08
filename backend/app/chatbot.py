@@ -4,6 +4,7 @@ Phần phân tích câu là hàm thuần (không cần DB) để kiểm thử đ
 import datetime as dt
 import re
 import unicodedata
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -26,6 +27,7 @@ WEEKDAYS = {"2": 0, "hai": 0, "3": 1, "ba": 1, "4": 2, "tu": 2, "5": 3, "nam": 3
 SLOTS = {"sang": (5, 12), "trua": (11, 14), "chieu": (12, 18), "toi": (18, 24), "dem": (21, 24)}
 SUGGESTIONS = ["Tìm chuyến Hà Nội đi Đà Nẵng sáng thứ 7 tuần sau dưới 1 triệu", "Hành lý ký gửi bao nhiêu kg?",
                "Chính sách hoàn huỷ vé", "Có mã khuyến mãi nào không?"]
+ALIASES_CODE = {"Hà Nội": "HAN", "TP. Hồ Chí Minh": "SGN", "Đà Nẵng": "DAD", "Phú Quốc": "PQC", "Nha Trang": "CXR"}
 
 
 def normalize(text: str) -> str:
@@ -35,8 +37,8 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^\w/.,<-]", " ", text)).strip()
 
 
-def find_cities(text: str, aliases: dict[str, list[str]], original: str = "") -> tuple[str | None, str | None]:
-    """Trả (điểm đi, điểm đến). Ưu tiên cấu trúc 'từ X'/'đến Y'; không có thì lấy theo thứ tự xuất hiện."""
+def city_mentions(text: str, aliases: dict[str, list[str]], original: str = "") -> list[tuple[int, int, str]]:
+    """Các thành phố / mã sân bay nhắc tới trong câu, theo thứ tự: [(vị trí đầu, vị trí cuối, mã)]."""
     hits = []
     for code, names in aliases.items():
         for name in names:
@@ -51,6 +53,26 @@ def find_cities(text: str, aliases: dict[str, list[str]], original: str = "") ->
         if start >= last_end and (not picked or picked[-1][2] != code):
             picked.append((start, end, code))
             last_end = end
+    return picked
+
+
+def single_city(text: str, aliases: dict[str, list[str]], original: str = "") -> tuple[str, str | None] | None:
+    """Câu chỉ nhắc một thành phố: trả (mã, vai trò). 'từ Huế' -> origin; 'đi Huế', 'tới Huế' -> destination; 'Huế' -> None."""
+    codes = {code for _, _, code in city_mentions(text, aliases, original)}
+    if len(codes) != 1:
+        return None
+    start = city_mentions(text, aliases, original)[0][0]
+    before = text[max(0, start - 12):start]
+    if re.search(r"\b(tu|xuat phat)\s*$", before):
+        return codes.pop(), "origin"
+    if re.search(r"\b(di|den|toi|ra|vao|sang|bay)\s*$", before):  # chỉ có một thành phố nên "đi X" chắc chắn là điểm đến
+        return codes.pop(), "destination"
+    return codes.pop(), None
+
+
+def find_cities(text: str, aliases: dict[str, list[str]], original: str = "") -> tuple[str | None, str | None]:
+    """Trả (điểm đi, điểm đến). Ưu tiên cấu trúc 'từ X'/'đến Y'; không có thì lấy theo thứ tự xuất hiện."""
+    picked = city_mentions(text, aliases, original)
     if not picked:
         return None, None
     origin = dest = None
@@ -129,8 +151,54 @@ def parse_search(message: str, today: dt.date, aliases: dict[str, list[str]]) ->
     cabin = "BUSINESS" if re.search(r"\b(thuong gia|business)\b", text) else \
         "ECONOMY" if re.search(r"\bpho thong\b", text) else None
     return {"origin": origin, "destination": dest, "date": parse_date(text, today), "max_price": parse_max_price(text),
-            "slot": parse_slot(message), "passengers": int(pax.group(1)) if pax else 1, "cabin": cabin,
+            "slot": parse_slot(message), "passengers": int(pax.group(1)) if pax else None, "cabin": cabin,
             "cheapest": bool(re.search(r"\b(re nhat|gia thap|tiet kiem)\b", text))}
+
+
+class ChatContext(BaseModel):
+    """Điều kiện tìm chuyến của lượt trước, trình duyệt gửi lại để bot hiểu câu hỏi nối tiếp (máy chủ không lưu gì)."""
+    origin: str | None = Field(None, pattern=r"^[A-Z]{3}$")
+    destination: str | None = Field(None, pattern=r"^[A-Z]{3}$")
+    date: dt.date | None = None
+    passengers: int = Field(1, ge=1, le=9)
+    max_price: int | None = Field(None, gt=0)
+    slot: tuple[int, int] | None = None
+    cabin: Literal["ECONOMY", "BUSINESS"] | None = None
+
+
+FOLLOW_UP = r"\b(con|thi sao|the con|vay con|doi sang|neu)\b"
+RETURN_TRIP = r"\b(chieu ve|chuyen ve|nguoc lai|bay ve|quay ve)\b"
+
+
+def with_context(q: dict, ctx: ChatContext | None, message: str, aliases: dict[str, list[str]]) -> dict:
+    """Ghép câu hỏi nối tiếp ("ngày mai thì sao?", "chuyến về", "còn Phú Quốc?") với lượt tìm trước.
+    Câu đã đủ điểm đi và điểm đến mà không có từ nối tiếp thì coi là câu tìm mới."""
+    text = normalize(message)
+    if not ctx or not (ctx.origin or ctx.destination):
+        return {**q, "passengers": q["passengers"] or 1}
+    q = dict(q)
+    is_return = False
+    if q["origin"] and q["destination"]:
+        if not re.search(FOLLOW_UP, text):
+            return {**q, "passengers": q["passengers"] or 1}
+    elif re.search(RETURN_TRIP, text) and ctx.origin and ctx.destination:
+        q["origin"], q["destination"], is_return = ctx.destination, ctx.origin, True
+    elif one := single_city(text, aliases, message):
+        code, role = one
+        role = role or ("destination" if not ctx.destination else "origin" if not ctx.origin else "destination")
+        other = "origin" if role == "destination" else "destination"
+        q[role], q[other] = code, getattr(ctx, other)
+        if q[other] == code:
+            q[other] = None
+    else:
+        asks_more = any(q[k] for k in ("date", "max_price", "slot", "passengers", "cabin", "cheapest")) or re.search(FOLLOW_UP, text)
+        if not (asks_more and ctx.origin and ctx.destination):
+            return {**q, "passengers": q["passengers"] or 1}
+        q["origin"], q["destination"] = ctx.origin, ctx.destination
+    for key in ("max_price", "slot", "cabin") + (() if is_return else ("date",)):  # chuyến về không dùng lại ngày đi
+        q[key] = q[key] if q[key] is not None else getattr(ctx, key)
+    q["passengers"] = q["passengers"] or ctx.passengers
+    return q
 
 
 INTENTS = [  # (ý định, từ khoá trên câu đã bỏ dấu) — xét theo thứ tự
@@ -158,12 +226,24 @@ def money(v) -> str:
     return f"{v:,.0f}đ".replace(",", ".")
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
 class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=500)
+    context: ChatContext | None = None
+    history: list[ChatTurn] = Field(default_factory=list, max_length=12)  # các lượt trước, chỉ chế độ AI dùng
 
 
 @router.post("/chat")
 def chat(body: ChatIn, user=Depends(optional_user), db=Depends(get_db)):
+    from . import chatbot_ai  # nạp muộn vì chatbot_ai dùng lại các hàm trong file này
+    return chatbot_ai.reply(body, user, db) or rule_reply(body, user, db)
+
+
+def rule_reply(body: ChatIn, user, db) -> dict:
     msg = body.message.strip()
     text = normalize(msg)
     today = dt.datetime.now(dt.timezone(dt.timedelta(hours=7))).date()
@@ -172,27 +252,14 @@ def chat(body: ChatIn, user=Depends(optional_user), db=Depends(get_db)):
     pnr = re.search(r"\b([A-HJ-NP-Z2-9]{6})\b", msg)
     asks_booking = re.search(r"\b(ma dat cho|pnr|booking|dat cho)\b", text)
     if pnr and re.search(r"\d", pnr.group(1)) and (asks_booking or len(text) < 12):
-        b = db.execute("SELECT pnr, status, user_id, total_amount FROM bookings WHERE pnr = %s", (pnr.group(1),)).fetchone()
-        if b and user and (b["user_id"] == user["id"] or user["role"] != "PASSENGER"):
-            status = {"PENDING": "chờ thanh toán", "CONFIRMED": "đã xác nhận", "CANCELLED": "đã huỷ", "EXPIRED": "hết hạn"}
-            return {"reply": f"Đặt chỗ {b['pnr']} đang ở trạng thái {status[b['status']]}, tổng tiền {money(b['total_amount'])}.",
-                    "link": {"label": "Xem chi tiết đặt chỗ", "url": f"/bookings/{b['pnr']}"}}
-        if b or asks_booking:  # không có booking thì có thể là số hiệu chuyến bay (QH1021) -> xét tiếp bên dưới
-            return {"reply": "Để bảo mật, bạn vui lòng tra cứu đặt chỗ tại mục Quản lý đặt chỗ bằng mã đặt chỗ và "
-                             "họ của hành khách.", "link": {"label": "Quản lý đặt chỗ", "url": "/?tab=manage"}}
+        answer = booking_reply(db, pnr.group(1), user)
+        if answer.pop("found") or asks_booking:  # không có booking thì có thể là số hiệu chuyến bay (QH1021)
+            return answer
     flight_no = re.search(r"\b([A-Z][A-Z0-9])\s?(\d{2,4})\b", msg)
     if flight_no and not re.search(r"\b(tu|di|den)\b", text):
-        f = db.execute("""
-            SELECT flight_number, origin, destination, departure_time, estimated_departure, status FROM flights
-            WHERE flight_number = %s AND coalesce(estimated_departure, departure_time) > now() - interval '3 hours'
-            ORDER BY departure_time LIMIT 1""", (flight_no.group(1) + flight_no.group(2),)).fetchone()
-        if f:
-            status = {"SCHEDULED": "theo lịch", "ON_TIME": "đúng giờ", "DELAYED": "bị hoãn", "BOARDING": "đang lên máy bay",
-                      "DEPARTED": "đã cất cánh", "ARRIVED": "đã hạ cánh", "CANCELLED": "đã bị huỷ"}[f["status"]]
-            when = (f["estimated_departure"] or f["departure_time"]).astimezone(dt.timezone(dt.timedelta(hours=7)))
-            return {"reply": f"Chuyến {f['flight_number']} {f['origin']} → {f['destination']} khởi hành "
-                             f"{when:%H:%M ngày %d/%m}, hiện {status}.",
-                    "link": {"label": "Bảng trạng thái chuyến bay", "url": "/status"}}
+        answer = flight_status_reply(db, flight_no.group(1) + flight_no.group(2))
+        if answer:
+            return answer
 
     # 2. Tìm chuyến bay bằng ngôn ngữ tự nhiên
     aliases = {code: list(names) for code, names in ALIASES.items()}
@@ -200,14 +267,65 @@ def chat(body: ChatIn, user=Depends(optional_user), db=Depends(get_db)):
         aliases.setdefault(a["iata_code"], []).append(normalize(a["city"]))
     q = parse_search(msg, today, aliases)
     intent = detect_intent(msg)
+    if intent is None:  # câu hỏi chính sách ("trẻ em/con nhỏ", "hành lý"...) không bị hiểu là tìm chuyến nối tiếp
+        q = with_context(q, body.context, msg, aliases)
+    q["passengers"] = q["passengers"] or 1
     if q["origin"] and q["destination"] and intent not in ("baggage", "refund", "change", "checkin"):
         return search_reply(db, q, today)
-    if (q["origin"] or q["destination"]) and re.search(r"\b(chuyen|ve may bay|bay|tim|di)\b", text):
-        missing = "điểm đi" if not q["origin"] else "điểm đến"
-        return {"reply": f"Bạn muốn bay {('từ đâu' if missing == 'điểm đi' else 'đến đâu')}? Hãy nói đủ cả điểm đi và "
-                         f"điểm đến, ví dụ: \"Hà Nội đi Đà Nẵng ngày mai\".", "suggestions": SUGGESTIONS[:1]}
+    one = single_city(text, aliases, msg)
+    if (q["origin"] or q["destination"]) and (re.search(r"\b(chuyen|ve may bay|bay|tim|di)\b", text) or body.context):
+        known, role = (q["origin"] or q["destination"]), "origin" if q["origin"] else "destination"
+        if one and one[1] != "origin" and not body.context:  # "tôi muốn đi Đà Nẵng": thành phố duy nhất là điểm đến
+            role = "destination"
+        if role == "origin":
+            ask, chips = "Bạn muốn bay đến đâu?", [f"Đi {c}" for c in ("Đà Nẵng", "Phú Quốc", "Nha Trang") if ALIASES_CODE[c] != known]
+        else:
+            ask, chips = "Bạn bay từ đâu?", [f"Từ {c}" for c in ("Hà Nội", "TP. Hồ Chí Minh") if ALIASES_CODE[c] != known]
+        return {"reply": ask, "suggestions": chips[:2],
+                "context": {role: known, "passengers": q["passengers"], "date": q["date"], "max_price": q["max_price"],
+                            "slot": q["slot"], "cabin": q["cabin"]}}
 
     # 3. Hỏi đáp chính sách — trả lời từ dữ liệu thật
+    answer = policy_reply(db, intent)
+    if answer:
+        return answer
+    if intent == "greet":
+        return {"reply": "Xin chào! Mình là trợ lý ảo SkyBooking. Mình có thể tìm chuyến bay, giải đáp hành lý, hoàn đổi vé, "
+                         "khuyến mãi, check-in... Bạn cần gì nào?", "suggestions": SUGGESTIONS}
+    return {"reply": "Xin lỗi, mình chưa hiểu câu hỏi. Bạn thử hỏi theo các gợi ý dưới đây, hoặc gọi tổng đài 1900 6868.",
+            "suggestions": SUGGESTIONS}
+
+
+BOOKING_STATUS = {"PENDING": "chờ thanh toán", "CONFIRMED": "đã xác nhận", "CANCELLED": "đã huỷ", "EXPIRED": "hết hạn"}
+FLIGHT_STATUS = {"SCHEDULED": "theo lịch", "ON_TIME": "đúng giờ", "DELAYED": "bị hoãn", "BOARDING": "đang lên máy bay",
+                 "DEPARTED": "đã cất cánh", "ARRIVED": "đã hạ cánh", "CANCELLED": "đã bị huỷ"}
+
+
+def booking_reply(db, pnr: str, user) -> dict:
+    """Chỉ chủ đặt chỗ (hoặc nhân viên) đã đăng nhập mới xem được trạng thái; người khác được chỉ sang Quản lý đặt chỗ."""
+    b = db.execute("SELECT pnr, status, user_id, total_amount FROM bookings WHERE pnr = %s", (pnr.upper(),)).fetchone()
+    if b and user and (b["user_id"] == user["id"] or user["role"] != "PASSENGER"):
+        return {"reply": f"Đặt chỗ {b['pnr']} đang ở trạng thái {BOOKING_STATUS[b['status']]}, tổng tiền {money(b['total_amount'])}.",
+                "link": {"label": "Xem chi tiết đặt chỗ", "url": f"/bookings/{b['pnr']}"}, "found": True}
+    return {"reply": "Để bảo mật, bạn vui lòng tra cứu đặt chỗ tại mục Quản lý đặt chỗ bằng mã đặt chỗ và "
+                     "họ của hành khách.", "link": {"label": "Quản lý đặt chỗ", "url": "/?tab=manage"}, "found": bool(b)}
+
+
+def flight_status_reply(db, flight_number: str) -> dict | None:
+    f = db.execute("""
+        SELECT flight_number, origin, destination, departure_time, estimated_departure, status FROM flights
+        WHERE flight_number = %s AND coalesce(estimated_departure, departure_time) > now() - interval '3 hours'
+        ORDER BY departure_time LIMIT 1""", (flight_number.replace(" ", "").upper(),)).fetchone()
+    if not f:
+        return None
+    when = (f["estimated_departure"] or f["departure_time"]).astimezone(dt.timezone(dt.timedelta(hours=7)))
+    return {"reply": f"Chuyến {f['flight_number']} {f['origin']} → {f['destination']} khởi hành "
+                     f"{when:%H:%M ngày %d/%m}, hiện {FLIGHT_STATUS[f['status']]}.",
+            "link": {"label": "Bảng trạng thái chuyến bay", "url": "/status"}}
+
+
+def policy_reply(db, intent: str | None) -> dict | None:
+    """Trả lời câu hỏi chính sách từ dữ liệu thật; intent là một tên trong INTENTS (trừ 'greet')."""
     if intent == "baggage":
         fares = db.execute("SELECT name, checked_baggage_kg, carry_on_kg FROM fare_classes ORDER BY checked_baggage_kg").fetchall()
         bags = db.execute("SELECT name, price FROM ancillary_products WHERE category = 'BAGGAGE' AND is_active ORDER BY price").fetchall()
@@ -252,17 +370,21 @@ def chat(body: ChatIn, user=Depends(optional_user), db=Depends(get_db)):
     if intent == "kids":
         return {"reply": "Giá vé trẻ em (2–11 tuổi) bằng 90% giá người lớn, có ghế riêng. Em bé dưới 2 tuổi trả 10% giá vé, "
                          "ngồi cùng người lớn; mỗi người lớn đi kèm tối đa 1 em bé."}
-    if intent == "greet":
-        return {"reply": "Xin chào! Mình là trợ lý ảo SkyBooking. Mình có thể tìm chuyến bay, giải đáp hành lý, hoàn đổi vé, "
-                         "khuyến mãi, check-in... Bạn cần gì nào?", "suggestions": SUGGESTIONS}
-    return {"reply": "Xin lỗi, mình chưa hiểu câu hỏi. Bạn thử hỏi theo các gợi ý dưới đây nhé.", "suggestions": SUGGESTIONS}
+    return None
 
 
 def search_reply(db, q: dict, today: dt.date) -> dict:
     date_from = q["date"] or today
+    rows = find_flights(db, q, today)
+    return search_answer(q, rows, today, date_from)
+
+
+def find_flights(db, q: dict, today: dt.date) -> list[dict]:
+    """Tối đa 5 hạng vé còn chỗ; không nói ngày thì tìm trong 7 ngày tới, xếp theo giá."""
+    date_from = q["date"] or today
     date_to = q["date"] or today + dt.timedelta(days=6)
     hours = q["slot"] or (0, 24)
-    rows = db.execute("""
+    return db.execute("""
         SELECT flight_id, flight_number, airline_name, origin, destination, origin_city, destination_city,
                departure_time, arrival_time,
                fare_class, fare_name, cabin_class, price
@@ -276,13 +398,22 @@ def search_reply(db, q: dict, today: dt.date) -> dict:
         ORDER BY """ + ("price, departure_time" if q["cheapest"] or not q["date"] else "departure_time, price") + " LIMIT 5",
         (q["origin"], q["destination"], date_from, date_to, hours[0], hours[1], q["passengers"],
          q["max_price"], q["max_price"], q["cabin"], q["cabin"])).fetchall()
+
+
+def search_answer(q: dict, rows: list[dict], today: dt.date, date_from: dt.date) -> dict:
     when = f"ngày {q['date']:%d/%m}" if q["date"] else "7 ngày tới"
     conditions = [when] + ([f"dưới {money(q['max_price'])}"] if q["max_price"] else []) + \
                  ([f"khung {q['slot'][0]}h–{q['slot'][1]}h"] if q["slot"] else [])
     search_url = f"/search?origin={q['origin']}&destination={q['destination']}&date={date_from}&adults={q['passengers']}"
+    context = {k: q[k] for k in ("origin", "destination", "date", "passengers", "max_price", "slot", "cabin")}
+    # Gợi ý câu hỏi nối tiếp: bot nhớ điều kiện của lượt này nên chỉ cần nói phần thay đổi
+    next_day = (q["date"] or today) + dt.timedelta(days=1)
+    follow_ups = [f"Ngày {next_day:%d/%m} thì sao?", "Chuyến về", "Chỉ chuyến buổi tối" if q["slot"] != SLOTS["toi"] else "Buổi sáng thì sao?"]
     if not rows:
         return {"reply": f"Không tìm thấy chuyến {q['origin']} → {q['destination']} ({', '.join(conditions)}). "
-                         "Bạn thử đổi ngày hoặc tăng mức giá nhé.", "link": {"label": "Xem lịch bay", "url": search_url}}
+                         "Bạn thử đổi ngày hoặc tăng mức giá nhé.", "link": {"label": "Xem lịch bay", "url": search_url},
+                "context": {**context, "max_price": None}, "suggestions": follow_ups[:2]}
     return {"reply": f"Mình tìm được các chuyến {rows[0]['origin_city']} → {rows[0]['destination_city']} "
                      f"({', '.join(conditions)}):",
-            "flights": rows, "link": {"label": "Xem tất cả & đặt vé", "url": search_url}}
+            "flights": rows, "link": {"label": "Xem tất cả & đặt vé", "url": search_url},
+            "context": context, "suggestions": follow_ups}
