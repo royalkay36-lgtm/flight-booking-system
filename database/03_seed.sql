@@ -75,7 +75,13 @@ INSERT INTO aircraft (registration, model_code, airline_code) VALUES
     ('VN-A601', 'A321', 'VN'),
     ('VN-A861', 'B789', 'VN'),
     ('VN-A650', 'A320', 'VJ'),
-    ('VN-A590', 'A321', 'QH');
+    ('VN-A590', 'A321', 'QH'),
+    ('VN-A602', 'A321', 'VN'),
+    ('VN-A862', 'B789', 'VN'),
+    ('VN-A863', 'B789', 'VN'),
+    ('VN-A652', 'A320', 'VJ'),
+    ('VN-A653', 'A320', 'VJ'),
+    ('VN-A591', 'A321', 'QH');
 
 INSERT INTO fare_classes (code, name, cabin_class, checked_baggage_kg, carry_on_kg, change_fee, refund_fee, description) VALUES
     ('ECO_SAVER', 'Phổ thông Tiết kiệm', 'ECONOMY',   0,  7, 500000, NULL,
@@ -101,7 +107,8 @@ INSERT INTO vouchers (code, description, discount_type, discount_value, max_disc
     ('BAYVUI100', 'Giảm 100.000đ cho đơn từ 1.500.000đ',            'AMOUNT', 100000, NULL, 1500000, now() + interval '90 days',  500);
 
 -- ---------------------------------------------------------------------
--- Lịch bay mẫu: 7 chuyến/ngày x 14 ngày (trigger tự sinh flight_seats)
+-- Lịch bay mẫu: 20 chuyến/ngày x 14 ngày (trigger tự sinh flight_seats).
+-- Mỗi điểm đến nổi bật ở trang chủ đều có chuyến khứ hồi từ HAN hoặc SGN.
 -- ---------------------------------------------------------------------
 CREATE TEMP TABLE seed_routes (flight_number, airline_code, aircraft_reg, origin, destination, dep_local, duration, base_price) AS
 VALUES ('VN213',  'VN', 'VN-A601', 'HAN', 'SGN', time '06:00', interval '2 hours 10 minutes', 1500000),
@@ -111,7 +118,19 @@ VALUES ('VN213',  'VN', 'VN-A601', 'HAN', 'SGN', time '06:00', interval '2 hours
        ('VJ516',  'VJ', 'VN-A650', 'DAD', 'HAN', time '10:00', interval '1 hour 20 minutes',   690000),
        ('QH1021', 'QH', 'VN-A590', 'SGN', 'PQC', time '13:00', interval '1 hour',              850000),
        ('VN416',  'VN', 'VN-A861', 'HAN', 'ICN', time '23:40', interval '4 hours 30 minutes', 5200000),
-       ('VN417',  'VN', 'VN-A861', 'ICN', 'HAN', time '10:30', interval '5 hours',            5200000);
+       ('VN417',  'VN', 'VN-A861', 'ICN', 'HAN', time '10:30', interval '5 hours',            5200000),
+       ('VN615',  'VN', 'VN-A602', 'HAN', 'BKK', time '12:10', interval '1 hour 55 minutes', 2100000),
+       ('VN616',  'VN', 'VN-A602', 'BKK', 'HAN', time '15:30', interval '1 hour 50 minutes', 2100000),
+       ('VJ801',  'VJ', 'VN-A652', 'SGN', 'BKK', time '08:45', interval '1 hour 35 minutes', 1590000),
+       ('VJ802',  'VJ', 'VN-A652', 'BKK', 'SGN', time '11:30', interval '1 hour 40 minutes', 1590000),
+       ('VN310',  'VN', 'VN-A862', 'HAN', 'NRT', time '00:05', interval '5 hours 10 minutes', 7500000),
+       ('VN311',  'VN', 'VN-A862', 'NRT', 'HAN', time '09:30', interval '6 hours 30 minutes', 7500000),
+       ('VN300',  'VN', 'VN-A863', 'SGN', 'NRT', time '23:55', interval '5 hours 50 minutes', 7900000),
+       ('VN301',  'VN', 'VN-A863', 'NRT', 'SGN', time '09:00', interval '6 hours 45 minutes', 7900000),
+       ('VJ401',  'VJ', 'VN-A653', 'HAN', 'DLI', time '09:00', interval '1 hour 50 minutes',  890000),
+       ('VJ402',  'VJ', 'VN-A653', 'DLI', 'HAN', time '11:40', interval '1 hour 50 minutes',  890000),
+       ('QH1041', 'QH', 'VN-A591', 'HAN', 'CXR', time '08:15', interval '1 hour 55 minutes', 1050000),
+       ('QH1042', 'QH', 'VN-A591', 'CXR', 'HAN', time '11:00', interval '1 hour 55 minutes', 1050000);
 
 INSERT INTO flights (flight_number, airline_code, aircraft_reg, origin, destination, departure_time, arrival_time)
 SELECT r.flight_number, r.airline_code, r.aircraft_reg, r.origin, r.destination,
