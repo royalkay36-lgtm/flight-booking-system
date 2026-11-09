@@ -3,9 +3,9 @@ import time
 
 import psycopg
 from fastapi import APIRouter
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
-from .db import DATABASE_URL
+from .db import DATABASE_URL, ON_VERCEL
 
 router = APIRouter(tags=["realtime"])
 subscribers: set[asyncio.Queue] = set()
@@ -31,6 +31,8 @@ def background_loop(loop: asyncio.AbstractEventLoop):
 @router.get("/api/flight-status/stream")
 async def flight_status_stream():
     """Server-Sent Events: mỗi event là JSON {flight_id, flight_number, status, estimated_departure}."""
+    if ON_VERCEL:
+        return Response(status_code=204)  # 204 báo trình duyệt thôi kết nối lại; trang tự tải lại theo chu kỳ
     queue: asyncio.Queue = asyncio.Queue()
     subscribers.add(queue)
 

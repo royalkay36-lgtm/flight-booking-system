@@ -278,13 +278,51 @@ function CreateFlight({ catalog }) {
   )
 }
 
+const EMPTY_AIRPORT = {
+  iata_code: '', name: '', city: '', country: 'Vietnam', timezone: 'Asia/Ho_Chi_Minh',
+  image_url: '', description: '', is_featured: false,
+}
+const FALLBACK_DESTINATION_IMAGE = '/images/canh-may-bay.jpg'
+
+// Ảnh thu nhỏ để admin kiểm tra đường dẫn ảnh; ảnh lỗi thì hiện ảnh dự phòng
+function DestinationThumb({ src }) {
+  const url = src?.trim() || FALLBACK_DESTINATION_IMAGE
+  return (
+    <img key={url} src={url} alt="" loading="lazy"
+      onError={(e) => { e.currentTarget.src = FALLBACK_DESTINATION_IMAGE }}
+      className="h-10 w-14 flex-none rounded-lg border border-line object-cover" />
+  )
+}
+
 function Fleet({ catalog, reload }) {
-  const [airport, setAirport] = useState({ iata_code: '', name: '', city: '', country: 'Vietnam', timezone: 'Asia/Ho_Chi_Minh' })
+  const [airport, setAirport] = useState({ ...EMPTY_AIRPORT })
+  const [airportEdits, setAirportEdits] = useState({})
   const [model, setModel] = useState({ code: '', manufacturer: 'Airbus', name: '', layouts: 'BUSINESS 1-4 AC-DF\nECONOMY 5-7 ABC-DEF 150000\nECONOMY 8-32 ABC-DEF 40000' })
   const [aircraft, setAircraft] = useState({ registration: '', model_code: catalog.models[0]?.code ?? '', airline_code: catalog.airlines[0]?.iata_code ?? '' })
   const [submit, feedback] = useSubmit()
 
   const post = (path, body) => api(path, { method: 'POST', body }).then(reload)
+
+  const addAirport = submit(async () => {
+    await post('/admin/airports', { ...airport, iata_code: airport.iata_code.trim().toUpperCase() })
+    setAirport({ ...EMPTY_AIRPORT })
+  }, 'Đã thêm sân bay')
+
+  // Sửa ảnh / mô tả / trạng thái nổi bật của sân bay đã có
+  const editOf = (a) => airportEdits[a.iata_code] ?? {
+    image_url: a.image_url ?? '', description: a.description ?? '', is_featured: a.is_featured ?? false,
+  }
+  const isDirty = (a) => {
+    const d = editOf(a)
+    return d.image_url !== (a.image_url ?? '') || d.description !== (a.description ?? '') || d.is_featured !== (a.is_featured ?? false)
+  }
+  const setEdit = (a, patch) => setAirportEdits({ ...airportEdits, [a.iata_code]: { ...editOf(a), ...patch } })
+  const resetEdit = (a) => setAirportEdits({ ...airportEdits, [a.iata_code]: undefined })
+  const saveAirport = (a) => submit(async () => {
+    await api(`/admin/airports/${a.iata_code}`, { method: 'PATCH', body: editOf(a) })
+    resetEdit(a)
+    await reload()
+  }, `Đã lưu điểm đến ${a.iata_code}`)
   // Mỗi dòng: "<HẠNG> <hàng đầu>-<hàng cuối> <cột ghế, '-' là lối đi>", ví dụ "ECONOMY 5-32 ABC-DEF"
   const parseLayouts = (text) => text.trim().split('\n').map((line) => {
     const [cabin_class, rows, seat_columns, seat_fee = 0] = line.trim().split(/\s+/)
@@ -301,13 +339,28 @@ function Fleet({ catalog, reload }) {
     <div className="space-y-4">
       {feedback}
       <div className="grid gap-4 lg:grid-cols-3">
-        <form className="card space-y-3" onSubmit={submit(() => post('/admin/airports', { ...airport, iata_code: airport.iata_code.toUpperCase() }), 'Đã thêm sân bay')}>
+        <form className="card space-y-3" onSubmit={addAirport}>
           <h2 className="font-semibold">Thêm sân bay</h2>
           {field(airport, setAirport, 'iata_code', 'Mã IATA', { maxLength: 3, className: 'input uppercase' })}
           {field(airport, setAirport, 'name', 'Tên sân bay')}
           {field(airport, setAirport, 'city', 'Thành phố')}
           {field(airport, setAirport, 'country', 'Quốc gia')}
           {field(airport, setAirport, 'timezone', 'Múi giờ (IANA)')}
+          <label><span className="label">Ảnh điểm đến (đường dẫn)</span>
+            <input className="input" maxLength={500} placeholder="/images/destinations/XXX.jpg" value={airport.image_url}
+              onChange={(e) => setAirport({ ...airport, image_url: e.target.value })} /></label>
+          <div className="flex items-center gap-3">
+            <DestinationThumb src={airport.image_url} />
+            <p className="text-meta text-muted">Ảnh nằm trong frontend/public/images/destinations/, nén ≤ 300KB.</p>
+          </div>
+          <label><span className="label">Mô tả ngắn</span>
+            <input className="input" maxLength={500} placeholder="Nét hấp dẫn của điểm đến…" value={airport.description}
+              onChange={(e) => setAirport({ ...airport, description: e.target.value })} /></label>
+          <label className="flex items-center gap-2 text-ui">
+            <input type="checkbox" checked={airport.is_featured}
+              onChange={(e) => setAirport({ ...airport, is_featured: e.target.checked })} />
+            Hiện trong mục điểm đến nổi bật
+          </label>
           <button className="btn">Thêm</button>
         </form>
 
@@ -336,6 +389,53 @@ function Fleet({ catalog, reload }) {
           <button className="btn">Thêm</button>
           <ul className="text-xs text-slate-500">{catalog.aircraft.map((a) => <li key={a.registration}>{a.registration} — {a.model_name} ({a.airline_code})</li>)}</ul>
         </form>
+      </div>
+
+      <div className="card overflow-x-auto">
+        <div className="mb-3">
+          <h2 className="font-semibold">Ảnh & mô tả điểm đến</h2>
+          <p className="mt-1 text-meta text-muted">Sửa ảnh, mô tả và trạng thái nổi bật, rồi bấm Lưu.</p>
+        </div>
+        <table className="table">
+          <thead>
+            <tr><th>Mã</th><th>Thành phố</th><th>Đường dẫn ảnh</th><th>Mô tả ngắn</th><th>Nổi bật</th><th /></tr>
+          </thead>
+          <tbody>
+            {catalog.airports.map((a) => {
+              const draft = editOf(a)
+              const dirty = isDirty(a)
+              return (
+                <tr key={a.iata_code} className={dirty ? 'bg-brand-wash' : undefined}>
+                  <td className="font-mono font-semibold">{a.iata_code}</td>
+                  <td className="whitespace-nowrap">{a.city}</td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <DestinationThumb src={draft.image_url} />
+                      <input className="input w-64" maxLength={500} aria-label={`Đường dẫn ảnh ${a.iata_code}`}
+                        placeholder={`/images/destinations/${a.iata_code}.jpg`} value={draft.image_url}
+                        onChange={(e) => setEdit(a, { image_url: e.target.value })} />
+                    </div>
+                  </td>
+                  <td>
+                    <input className="input w-80" maxLength={500} aria-label={`Mô tả ${a.iata_code}`}
+                      placeholder="Mô tả ngắn về điểm đến" value={draft.description}
+                      onChange={(e) => setEdit(a, { description: e.target.value })} />
+                  </td>
+                  <td>
+                    <input type="checkbox" aria-label={`Điểm đến nổi bật ${a.iata_code}`}
+                      checked={draft.is_featured} onChange={(e) => setEdit(a, { is_featured: e.target.checked })} />
+                  </td>
+                  <td className="whitespace-nowrap">
+                    <button className="btn-outline" disabled={!dirty} onClick={saveAirport(a)}>Lưu</button>
+                    {dirty && (
+                      <button className="ml-2 text-meta text-muted hover:text-ink" onClick={() => resetEdit(a)}>Hoàn tác</button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   )

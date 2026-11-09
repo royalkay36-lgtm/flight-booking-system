@@ -158,3 +158,32 @@ def test_checkin_xep_ghe_tu_dong_va_chatbot(c):
         assert c.post("/api/chat", json={"message": "VJ515"}).json()["reply"].startswith("Chuyến VJ515")
     finally:
         cleanup(pnrs)
+
+def test_destinations_featured(c):
+    """Kiểm thử API điểm đến nổi bật và các trường mở rộng của airports."""
+    # 1. Kiểm tra /api/airports trả về đủ image_url và description
+    airports_res = c.get("/api/airports")
+    assert airports_res.status_code == 200
+    airports_data = airports_res.json()
+    assert len(airports_data) > 0
+    assert "image_url" in airports_data[0]
+    assert "description" in airports_data[0]
+
+    # 2. Kiểm tra /api/destinations/featured
+    res = c.get("/api/destinations/featured")
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data) > 0
+    
+    # Kiểm tra cấu trúc từng điểm đến
+    for item in data:
+        assert "iata_code" in item
+        assert "city" in item
+        assert "image_url" in item
+        assert "description" in item
+        assert "min_price" in item
+
+    # Các điểm nổi bật có chuyến trong dữ liệu mẫu (như Đà Nẵng DAD hoặc Phú Quốc PQC) phải có giá
+    dad = next((x for x in data if x["iata_code"] == "DAD"), None)
+    if dad and dad["min_price"] is not None:
+        assert float(dad["min_price"]) > 0

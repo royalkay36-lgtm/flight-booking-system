@@ -9,10 +9,10 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
-from .db import pool
+from .db import ON_VERCEL, pool
 
 log = logging.getLogger(__name__)
-OUTBOX = pathlib.Path(__file__).resolve().parent.parent / "outbox"
+OUTBOX = pathlib.Path("/tmp/outbox") if ON_VERCEL else pathlib.Path(__file__).resolve().parent.parent / "outbox"  # Vercel chỉ cho ghi /tmp
 TZ = dt.timezone(dt.timedelta(hours=7))
 
 
@@ -33,6 +33,18 @@ def send_email(to: str, subject: str, body_html: str):
         smtp.starttls(context=ssl.create_default_context())
         smtp.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
         smtp.send_message(msg)
+
+
+def send_reset_email(to: str, full_name: str, link: str):
+    """Chạy nền (BackgroundTasks); lỗi gửi mail chỉ ghi log, người dùng vẫn nhận thông báo chung."""
+    body = (f"<p>Chào {html.escape(full_name)},</p>"
+            "<p>Bạn (hoặc ai đó) vừa yêu cầu đặt lại mật khẩu SkyBooking. Link dưới đây dùng được trong 30 phút:</p>"
+            f"<p><a href='{html.escape(link)}'>Đặt lại mật khẩu</a></p>"
+            "<p>Nếu bạn không yêu cầu, hãy bỏ qua email này; mật khẩu hiện tại vẫn giữ nguyên.</p>")
+    try:
+        send_email(to, "Đặt lại mật khẩu SkyBooking", body)
+    except Exception:
+        log.exception("Gửi email đặt lại mật khẩu thất bại")
 
 
 def notify_booking(pnr: str, subject: str, message: str):

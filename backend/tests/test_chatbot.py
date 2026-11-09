@@ -1,13 +1,47 @@
 """Kiểm thử phần phân tích câu của chatbot (không cần database)."""
 import datetime as dt
 
-from app.chatbot import ALIASES, detect_intent, parse_max_price, parse_search, parse_slot
+from app.chatbot import ALIASES, ChatContext, detect_intent, parse_max_price, parse_search, parse_slot, single_city, normalize, with_context
 
 TODAY = dt.date(2026, 11, 2)  # thứ Hai
 
 
 def search(msg):
     return parse_search(msg, TODAY, ALIASES)
+
+
+def follow(msg, **ctx):
+    return with_context(search(msg), ChatContext(**ctx), msg, ALIASES)
+
+
+def test_mot_thanh_pho_va_vai_tro():
+    assert single_city(normalize("Tôi muốn đi Đà Nẵng"), ALIASES) == ("DAD", "destination")
+    assert single_city(normalize("từ Huế"), ALIASES) == ("HUI", "origin")
+    assert single_city(normalize("Hà Nội"), ALIASES) == ("HAN", None)
+    assert single_city(normalize("Hà Nội đi Huế"), ALIASES) is None
+
+
+def test_cau_hoi_noi_tiep_dung_lai_dieu_kien_truoc():
+    base = dict(origin="HAN", destination="DAD", date=dt.date(2026, 11, 14), passengers=2, slot=(5, 12))
+    q = follow("Ngày 15/11 thì sao?", **base)  # đổi ngày, giữ tuyến, số khách, khung giờ
+    assert (q["origin"], q["destination"], q["date"], q["passengers"], q["slot"]) == ("HAN", "DAD", dt.date(2026, 11, 15), 2, (5, 12))
+    q = follow("Chuyến về", **base)  # đảo chiều, không dùng lại ngày đi
+    assert (q["origin"], q["destination"], q["date"]) == ("DAD", "HAN", None)
+    q = follow("Còn Phú Quốc thì sao?", **base)  # đổi điểm đến
+    assert (q["origin"], q["destination"], q["date"]) == ("HAN", "PQC", dt.date(2026, 11, 14))
+    q = follow("Chỉ chuyến buổi tối", **base)
+    assert (q["origin"], q["slot"]) == ("HAN", (18, 24))
+    q = follow("Sài Gòn đi Huế", **base)  # câu tìm mới đầy đủ: không kéo điều kiện cũ
+    assert (q["origin"], q["destination"], q["date"], q["passengers"]) == ("SGN", "HUI", None, 1)
+
+
+def test_tra_loi_cau_hoi_thieu_thanh_pho():
+    q = follow("Hà Nội", destination="DAD")  # bot vừa hỏi "Bạn bay từ đâu?"
+    assert (q["origin"], q["destination"]) == ("HAN", "DAD")
+    q = follow("Từ TP.HCM", destination="DAD")
+    assert (q["origin"], q["destination"]) == ("SGN", "DAD")
+    q = follow("cảm ơn", destination="DAD")
+    assert q["origin"] is None
 
 
 def test_cau_vi_du_trong_de_cuong():
@@ -46,6 +80,7 @@ def test_gia_va_so_khach():
     assert parse_max_price("duoi 1.200.000d") == 1_200_000
     assert parse_max_price("re nhat") is None
     assert search("2 người hà nội đi đà nẵng")["passengers"] == 2
+    assert search("hà nội đi đà nẵng")["passengers"] is None  # không nói số khách: để lượt trước quyết định
     assert search("hà nội đi đà nẵng hạng thương gia")["cabin"] == "BUSINESS"
 
 
